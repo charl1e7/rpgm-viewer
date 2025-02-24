@@ -1,0 +1,18 @@
+{
+    "files.exclude": {
+        "**/.git": true,
+        "**/.svn": true,
+        "**/.hg": true,
+        "**/CVS": true,
+        "**/.DS_Store": true,
+        "**/Thumbs.db": true,
+        "Cargo.lock": true,
+        ".vscode": true,
+        "target": true
+    },
+    "hide-files.files": [
+        "Cargo.lock",
+        ".vscode",
+        "target"
+    ]
+}

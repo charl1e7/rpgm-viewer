@@ -1,0 +1,20 @@
+[package]
+name = "rpgm-enc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+base64 = "0.22"
+lz-string = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2.0"
+
+[dev-dependencies]
+symphonia = { version = "0.5", features = ["ogg", "isomp4"] }
+symphonia-bundle-mp3 = "0.5"
+symphonia-codec-vorbis = "0.5"
+symphonia-core = "0.5"
+symphonia-format-ogg = "0.5"
+image = "0.25"
+
