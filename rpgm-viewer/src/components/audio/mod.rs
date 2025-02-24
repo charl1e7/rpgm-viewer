@@ -7,7 +7,6 @@ use std::{
 use rodio::{Decoder, OutputStream, Sink};
 use rpgm_enc::Decrypter;
 
-
 pub mod ui;
 #[derive(Default)]
 pub struct AudioState {

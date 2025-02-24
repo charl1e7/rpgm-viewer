@@ -57,12 +57,20 @@ impl FileBrowser {
         let crypt_settings = crypt_manager.get_settings().unwrap();
         let expanded_folders = crypt_settings.get_expanded_folders();
 
-        if self.entries_cache.is_none() || self.last_expanded_state != expanded_folders {
+        let dir_metadata = std::fs::metadata(root).ok().and_then(|m| m.modified().ok());
+        let needs_update = self.entries_cache.is_none()
+            || self.last_expanded_state != expanded_folders
+            || self.last_update_time.map_or(true, |last| {
+                dir_metadata.map_or(true, |current| current > last)
+            });
+
+        if needs_update {
             let mut new_entries =
                 FileEntry::recursive_collect_entries_flat(root, 0, &expanded_folders);
             self.preserve_thumbnails(&mut new_entries, ui_settings);
             self.entries_cache = Some(new_entries);
             self.last_expanded_state = expanded_folders.clone();
+            self.last_update_time = dir_metadata;
         }
     }
 
@@ -276,7 +284,7 @@ impl FileBrowser {
     }
 
     fn show_folder_entry(
-        &self,
+        &mut self,
         ui: &mut egui::Ui,
         entry: &FileEntry,
         crypt_manager: &mut CryptManager,
@@ -292,7 +300,7 @@ impl FileBrowser {
     }
 
     fn show_folder_context_menu(
-        &self,
+        &mut self,
         ui: &mut egui::Ui,
         entry: &FileEntry,
         crypt_manager: &mut CryptManager,
@@ -317,14 +325,14 @@ impl FileBrowser {
         ui.separator();
 
         if ui.button("Encrypt All Files").clicked() {
-            if let Err(e) = crypt_manager.encrypt_folder(&entry.path) {
+            if let Err(e) = crypt_manager.encrypt_folder(&entry.path, self) {
                 eprintln!("Failed to encrypt folder: {}", e);
             }
             ui.close_menu();
         }
 
         if ui.button("Decrypt All Files").clicked() {
-            if let Err(e) = crypt_manager.decrypt_folder(&entry.path) {
+            if let Err(e) = crypt_manager.decrypt_folder(&entry.path, self) {
                 eprintln!("Failed to decrypt folder: {}", e);
             }
             ui.close_menu();
@@ -408,7 +416,7 @@ impl FileBrowser {
     }
 
     fn show_file_context_menu(
-        &self,
+        &mut self,
         ui: &mut egui::Ui,
         entry: &FileEntry,
         crypt_manager: &mut CryptManager,
@@ -430,14 +438,14 @@ impl FileBrowser {
 
         if entry.is_encrypted {
             if ui.button("Decrypt").clicked() {
-                if let Err(e) = crypt_manager.decrypt_image(&entry.path) {
+                if let Err(e) = crypt_manager.decrypt_image(&entry.path, self) {
                     eprintln!("Failed to decrypt: {}", e);
                 }
                 ui.close_menu();
             }
         } else {
             if ui.button("Encrypt").clicked() {
-                if let Err(e) = crypt_manager.encrypt_image(&entry.path) {
+                if let Err(e) = crypt_manager.encrypt_image(&entry.path, self) {
                     eprintln!("Failed to encrypt: {}", e);
                 }
                 ui.close_menu();

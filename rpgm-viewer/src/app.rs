@@ -1,4 +1,3 @@
-
 use crate::components::audio::AudioState;
 use crate::components::crypt_manager::CryptManager;
 use crate::components::crypt_settings::ui::CryptSettingsWindow;

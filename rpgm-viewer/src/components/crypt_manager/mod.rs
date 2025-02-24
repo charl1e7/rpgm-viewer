@@ -6,7 +6,12 @@ use std::{
 
 use log::info;
 
-use super::{crypt_settings::CryptSettings, file_browser::file_entry::FileEntry};
+use crate::components::file_browser;
+
+use super::{
+    crypt_settings::CryptSettings,
+    file_browser::{file_entry::FileEntry, FileBrowser},
+};
 
 #[derive(serde::Deserialize, serde::Serialize, Default)]
 pub struct CryptManager {
@@ -228,13 +233,17 @@ impl CryptManager {
         })
     }
 
-    pub fn encrypt_folder(&mut self, path: &std::path::Path) -> Result<(), String> {
+    pub fn encrypt_folder(
+        &mut self,
+        path: &std::path::Path,
+        file_browser: &mut FileBrowser,
+    ) -> Result<(), String> {
         let entries = FileEntry::recursive_collect_entries_flat(path, 0, &[]);
         let mut errors = Vec::new();
 
         for entry in entries {
             if !entry.is_folder && !entry.is_encrypted {
-                if let Err(e) = self.encrypt_image(&entry.path) {
+                if let Err(e) = self.encrypt_image(&entry.path, file_browser) {
                     errors.push(format!("Failed to encrypt {}: {}", entry.path.display(), e));
                 }
             }
@@ -247,13 +256,17 @@ impl CryptManager {
         }
     }
 
-    pub fn decrypt_folder(&mut self, path: &std::path::Path) -> Result<(), String> {
+    pub fn decrypt_folder(
+        &mut self,
+        path: &std::path::Path,
+        file_browser: &mut FileBrowser,
+    ) -> Result<(), String> {
         let entries = FileEntry::recursive_collect_entries_flat(path, 0, &[]);
         let mut errors = Vec::new();
 
         for entry in entries {
             if !entry.is_folder && entry.is_encrypted {
-                if let Err(e) = self.decrypt_image(&entry.path) {
+                if let Err(e) = self.decrypt_image(&entry.path, file_browser) {
                     errors.push(format!("Failed to decrypt {}: {}", entry.path.display(), e));
                 }
             }
@@ -265,7 +278,11 @@ impl CryptManager {
             Err(errors.join("\n"))
         }
     }
-    pub fn encrypt_image(&mut self, path: &std::path::Path) -> Result<(), String> {
+    pub fn encrypt_image(
+        &mut self,
+        path: &std::path::Path,
+        file_browser: &mut FileBrowser,
+    ) -> Result<(), String> {
         let root = self.current_folder.clone().ok_or("No root folder set")?;
         let crypt_settings = self.get_settings().ok_or("No settings set")?;
         let rpgmaker_version = crypt_settings.rpgmaker_version;
@@ -328,10 +345,16 @@ impl CryptManager {
             "Successfully wrote encrypted file to: {}",
             output_path.display()
         );
+
+        file_browser.reset_cache();
         Ok(())
     }
 
-    pub fn decrypt_image(&mut self, path: &std::path::Path) -> Result<(), String> {
+    pub fn decrypt_image(
+        &mut self,
+        path: &std::path::Path,
+        file_browser: &mut FileBrowser,
+    ) -> Result<(), String> {
         let root = self.current_folder.clone().ok_or("No root folder set")?;
         let crypt_settings = self.get_settings().ok_or("No settings set")?;
         let decrypt_path = crypt_settings
@@ -403,6 +426,8 @@ impl CryptManager {
             "Successfully wrote decrypted file to: {}",
             output_path.display()
         );
+
+        file_browser.reset_cache();
         Ok(())
     }
 }
