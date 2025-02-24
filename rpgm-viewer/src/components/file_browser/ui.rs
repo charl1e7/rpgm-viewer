@@ -1,22 +1,14 @@
 use super::file_entry::FileEntry;
 use super::FileBrowser;
 use std::collections::HashMap;
-use std::collections::HashSet;
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::path::Path;
 
 use crate::components::audio::AudioState;
 use crate::components::crypt_manager::CryptManager;
 use crate::components::image_viewer::ImageViewer;
 use crate::components::ui_settings::UiSettings;
 use log::{info, trace};
-use rodio::{Decoder, OutputStream, Sink};
 use rpgm_enc::Decrypter;
-use std::fs::File;
-use std::io::BufReader;
 
 impl FileBrowser {
     pub fn show(

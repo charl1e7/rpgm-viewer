@@ -1,10 +1,3 @@
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
 
 use crate::components::audio::AudioState;
 use crate::components::crypt_manager::CryptManager;
@@ -13,10 +6,6 @@ use crate::components::dropped_file::DroppedFile;
 use crate::components::file_browser::FileBrowser;
 use crate::components::image_viewer::ImageViewer;
 use crate::components::ui_settings::UiSettings;
-use log::info;
-use rodio::{Decoder, OutputStream, Sink};
-use std::fs::File;
-use std::io::BufReader;
 
 #[derive(serde::Deserialize, serde::Serialize, Default)]
 #[serde(default)]

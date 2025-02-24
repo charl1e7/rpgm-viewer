@@ -1,8 +1,7 @@
-use image::ImageFormat;
-use rpgm_enc::{Decrypter, FileExtension, Key, RPGFile, RPGMakerVersion, Result};
+use rpgm_enc::{Decrypter, FileExtension, RPGFile, RPGMakerVersion, Result};
 use std::fs;
 use std::path::PathBuf;
-use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_VORBIS};
+use symphonia::core::codecs::CODEC_TYPE_VORBIS;
 use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;

@@ -7,7 +7,6 @@ use std::{
 use rodio::{Decoder, OutputStream, Sink};
 use rpgm_enc::Decrypter;
 
-use super::crypt_manager::CryptManager;
 
 pub mod ui;
 #[derive(Default)]

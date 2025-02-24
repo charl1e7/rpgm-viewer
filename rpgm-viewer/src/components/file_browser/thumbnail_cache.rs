@@ -1,7 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
-    sync::atomic::{AtomicUsize, Ordering},
     time::{Duration, Instant},
 };
 

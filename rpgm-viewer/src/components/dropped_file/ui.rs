@@ -1,6 +1,5 @@
-use std::path::PathBuf;
 
-use log::{debug, info, trace};
+use log::{debug, trace};
 
 use crate::components::{
     crypt_manager::CryptManager, file_browser::FileBrowser, image_viewer::ImageViewer,

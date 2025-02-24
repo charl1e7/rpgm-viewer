@@ -1,9 +1,7 @@
 pub mod ui;
 
-use log::info;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
 #[derive(Default, serde::Deserialize, serde::Serialize)]
 pub struct CryptSettings {

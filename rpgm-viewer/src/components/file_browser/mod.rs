@@ -1,22 +1,10 @@
 pub mod file_entry;
 pub mod thumbnail_cache;
 pub mod ui;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::default;
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::path::PathBuf;
+use std::time::Duration;
 
-use crate::components::crypt_manager::CryptManager;
-use crate::components::ui_settings::UiSettings;
 use file_entry::FileEntry;
-use log::info;
-use rodio::{Decoder, OutputStream, Sink};
-use std::fs::File;
-use std::io::BufReader;
 use thumbnail_cache::ThumbnailCache;
 
 #[derive(serde::Deserialize, serde::Serialize)]

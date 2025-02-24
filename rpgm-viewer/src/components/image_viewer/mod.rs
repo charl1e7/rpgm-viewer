@@ -1,17 +1,9 @@
 pub mod ui;
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-    str::FromStr,
-};
+use std::path::PathBuf;
 
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, trace};
 use rpgm_enc::Decrypter;
 
-use super::{
-    crypt_manager::{self, CryptManager},
-    crypt_settings::CryptSettings,
-};
 
 #[derive(serde::Deserialize, serde::Serialize, Default)]
 pub struct ImageViewer {

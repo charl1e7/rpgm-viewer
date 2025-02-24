@@ -1,8 +1,5 @@
-use egui::Context;
 use rfd;
-use std::path::Path;
 use std::path::PathBuf;
-use std::str::FromStr;
 
 use crate::components::crypt_manager::CryptManager;
 

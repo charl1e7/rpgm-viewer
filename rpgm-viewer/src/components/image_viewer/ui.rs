@@ -2,7 +2,7 @@ use log::info;
 
 use crate::components::{
     crypt_manager::CryptManager,
-    file_browser::{self, FileBrowser},
+    file_browser::{FileBrowser},
 };
 
 use super::ImageViewer;
