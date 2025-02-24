@@ -1,5 +1,8 @@
 use std::{
-    collections::{HashMap, HashSet}, path::{Path, PathBuf}, sync::atomic::{AtomicUsize, Ordering}, time::{Duration, Instant}
+    collections::{HashMap, HashSet},
+    path::{Path, PathBuf},
+    sync::atomic::{AtomicUsize, Ordering},
+    time::{Duration, Instant},
 };
 
 #[derive(Default)]

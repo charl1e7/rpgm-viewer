@@ -1,5 +1,5 @@
-use std::path::{Path, PathBuf};
 use crate::types::*;
+use std::path::{Path, PathBuf};
 
 pub struct RPGFile {
     path: PathBuf,
@@ -12,7 +12,7 @@ impl RPGFile {
         Ok(Self {
             path,
             content: None,
-            version: RPGMakerVersion::MV, 
+            version: RPGMakerVersion::MV,
         })
     }
 
@@ -59,7 +59,8 @@ impl RPGFile {
     }
 
     pub fn is_image(&self) -> bool {
-        self.extension().map_or(false, |ext| ext.get_file_type() == FileType::Image)
+        self.extension()
+            .map_or(false, |ext| ext.get_file_type() == FileType::Image)
     }
 
     pub fn mime_type(&self) -> Option<&'static str> {

@@ -1,7 +1,7 @@
-use std::io::Read;
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-use serde_json::Value;
 use crate::types::*;
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use serde_json::Value;
+use std::io::Read;
 
 #[derive(Default, serde::Deserialize, serde::Serialize, Clone)]
 pub struct Decrypter {
@@ -29,7 +29,8 @@ impl Decrypter {
     const DEFAULT_VERSION: &'static str = "000301";
     const DEFAULT_REMAIN: &'static str = "0000000000";
     const PNG_HEADER_BYTES: &'static str = "89 50 4E 47 0D 0A 1A 0A 00 00 00 0D 49 48 44 52";
-    const OGG_HEADER_BYTES: &'static str = "4F 67 67 53 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00";
+    const OGG_HEADER_BYTES: &'static str =
+        "4F 67 67 53 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00";
     const M4A_HEADER_BYTES: &'static str = "00 00 00 20 66 74 79 70 4D 34 41 20 00 00 00 00";
 
     pub fn new(key: Option<Key>) -> Self {
@@ -100,9 +101,9 @@ impl Decrypter {
 
         // Rem fake header
         let mut content = data[self.get_header_len()..].to_vec();
-        
+
         self.xor_bytes(&mut content);
-        
+
         Ok(content)
     }
 
@@ -141,13 +142,16 @@ impl Decrypter {
         }
 
         let has_correct_header = match file_type {
-            FileExtension::OGG | FileExtension::RPGMVO | FileExtension::OGG_ 
-                if data.len() >= 4 => &data[0..4] == &[0x4F, 0x67, 0x67, 0x53], // "OggS"
-            FileExtension::PNG | FileExtension::RPGMVP | FileExtension::PNG_ 
-                if data.len() >= 8 => &data[0..8] == &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A], // PNG signature
-            FileExtension::M4A | FileExtension::RPGMVM | FileExtension::M4A_ 
-                if data.len() >= 8 => &data[4..8] == b"ftyp", // M4A signature
-            _ => false
+            FileExtension::OGG | FileExtension::RPGMVO | FileExtension::OGG_ if data.len() >= 4 => {
+                &data[0..4] == &[0x4F, 0x67, 0x67, 0x53]
+            } // "OggS"
+            FileExtension::PNG | FileExtension::RPGMVP | FileExtension::PNG_ if data.len() >= 8 => {
+                &data[0..8] == &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+            } // PNG signature
+            FileExtension::M4A | FileExtension::RPGMVM | FileExtension::M4A_ if data.len() >= 8 => {
+                &data[4..8] == b"ftyp"
+            } // M4A signature
+            _ => false,
         };
 
         if has_correct_header {
@@ -158,15 +162,14 @@ impl Decrypter {
         let (correct_header_len, header_bytes) = match file_type {
             FileExtension::PNG | FileExtension::RPGMVP | FileExtension::PNG_ => (
                 self.png_header_len.unwrap_or(fake_header_len),
-                Self::PNG_HEADER_BYTES
+                Self::PNG_HEADER_BYTES,
             ),
-            FileExtension::OGG | FileExtension::RPGMVO | FileExtension::OGG_ => (
-                self.ogg_header_len.unwrap_or(28), 
-                Self::OGG_HEADER_BYTES
-            ),
+            FileExtension::OGG | FileExtension::RPGMVO | FileExtension::OGG_ => {
+                (self.ogg_header_len.unwrap_or(28), Self::OGG_HEADER_BYTES)
+            }
             FileExtension::M4A | FileExtension::RPGMVM | FileExtension::M4A_ => (
                 self.m4a_header_len.unwrap_or(fake_header_len),
-                Self::M4A_HEADER_BYTES
+                Self::M4A_HEADER_BYTES,
             ),
         };
 
@@ -213,15 +216,21 @@ impl Decrypter {
     }
 
     fn get_signature(&self) -> String {
-        self.signature.clone().unwrap_or_else(|| Self::DEFAULT_SIGNATURE.to_string())
+        self.signature
+            .clone()
+            .unwrap_or_else(|| Self::DEFAULT_SIGNATURE.to_string())
     }
 
     fn get_version(&self) -> String {
-        self.version.clone().unwrap_or_else(|| Self::DEFAULT_VERSION.to_string())
+        self.version
+            .clone()
+            .unwrap_or_else(|| Self::DEFAULT_VERSION.to_string())
     }
 
     fn get_remain(&self) -> String {
-        self.remain.clone().unwrap_or_else(|| Self::DEFAULT_REMAIN.to_string())
+        self.remain
+            .clone()
+            .unwrap_or_else(|| Self::DEFAULT_REMAIN.to_string())
     }
 
     pub fn detect_key_from_file(file_contents: &[u8]) -> Option<Key> {
@@ -275,11 +284,11 @@ mod tests {
         let key = Key::new("deadbeef").unwrap();
         let decrypter = Decrypter::new(Some(key));
         let test_data = b"Hello, World!";
-        
+
         let encrypted = decrypter.encrypt(test_data)?;
         let decrypted = decrypter.decrypt(&encrypted)?;
-        
+
         assert_eq!(&decrypted, test_data);
         Ok(())
     }
-} 
+}

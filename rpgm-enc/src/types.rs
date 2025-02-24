@@ -1,15 +1,13 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum RPGMakerVersion {
     #[default]
     MV,
     MZ,
 }
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Key {
     #[serde(rename = "key")]
     raw: String,
@@ -22,7 +20,8 @@ impl Key {
             return None;
         }
 
-        let bytes = key.as_bytes()
+        let bytes = key
+            .as_bytes()
             .chunks(2)
             .filter_map(|chunk| {
                 let hex = std::str::from_utf8(chunk).ok()?;
@@ -54,15 +53,19 @@ impl Key {
     }
 
     pub fn from_json(json: &str) -> Option<Self> {
-        serde_json::from_str::<serde_json::Value>(json).ok()
-            .and_then(|v| v.get("encryptionKey")
-                .and_then(|k| k.as_str())
-                .map(|s| s.to_string()))
+        serde_json::from_str::<serde_json::Value>(json)
+            .ok()
+            .and_then(|v| {
+                v.get("encryptionKey")
+                    .and_then(|k| k.as_str())
+                    .map(|s| s.to_string())
+            })
             .and_then(|key| Self::new(&key))
     }
 
     pub fn from_rpg_core(content: &str) -> Option<Self> {
-        content.lines()
+        content
+            .lines()
             .find(|line| line.contains("this._encryptionKey"))
             .and_then(|line| line.split('"').nth(1))
             .map(|s| s.to_string())
@@ -83,7 +86,8 @@ impl Key {
 
     fn get_png_header_bytes(header_len: usize) -> Vec<u8> {
         const PNG_HEADER: &str = "89 50 4E 47 0D 0A 1A 0A 00 00 00 0D 49 48 44 52";
-        PNG_HEADER.split(' ')
+        PNG_HEADER
+            .split(' ')
             .take(header_len)
             .filter_map(|hex| u8::from_str_radix(hex, 16).ok())
             .collect()
@@ -124,16 +128,16 @@ pub enum FileExtension {
     PNG,
     OGG,
     M4A,
-    
+
     // Encrypted MV extensions
-    RPGMVP,  // PNG
-    RPGMVO,  // OGG
-    RPGMVM,  // M4A
-    
+    RPGMVP, // PNG
+    RPGMVO, // OGG
+    RPGMVM, // M4A
+
     // Encrypted MZ extensions
-    PNG_,    // PNG
-    OGG_,    // OGG
-    M4A_,    // M4A
+    PNG_, // PNG
+    OGG_, // OGG
+    M4A_, // M4A
 }
 
 impl FileExtension {
@@ -167,9 +171,9 @@ impl FileExtension {
     }
 
     pub fn is_encrypted(&self) -> bool {
-        matches!(self, 
-            Self::RPGMVP | Self::RPGMVO | Self::RPGMVM |
-            Self::PNG_ | Self::OGG_ | Self::M4A_
+        matches!(
+            self,
+            Self::RPGMVP | Self::RPGMVO | Self::RPGMVM | Self::PNG_ | Self::OGG_ | Self::M4A_
         )
     }
 
@@ -184,8 +188,9 @@ impl FileExtension {
     pub fn get_file_type(&self) -> FileType {
         match self {
             Self::PNG | Self::RPGMVP | Self::PNG_ => FileType::Image,
-            Self::OGG | Self::RPGMVO | Self::OGG_ |
-            Self::M4A | Self::RPGMVM | Self::M4A_ => FileType::Audio,
+            Self::OGG | Self::RPGMVO | Self::OGG_ | Self::M4A | Self::RPGMVM | Self::M4A_ => {
+                FileType::Audio
+            }
         }
     }
 
@@ -202,7 +207,7 @@ impl FileExtension {
                 (Self::RPGMVP | Self::PNG_, _) => *self,
                 (Self::RPGMVO | Self::OGG_, _) => *self,
                 (Self::RPGMVM | Self::M4A_, _) => *self,
-                
+
                 (Self::PNG, RPGMakerVersion::MZ) => Self::PNG_,
                 (Self::PNG, RPGMakerVersion::MV) => Self::RPGMVP,
                 (Self::OGG, RPGMakerVersion::MZ) => Self::OGG_,
@@ -219,22 +224,22 @@ impl FileExtension {
 pub enum Error {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("Invalid file extension: {0}")]
     InvalidExtension(String),
-    
+
     #[error("Invalid encryption key")]
     InvalidKey,
-    
+
     #[error("Invalid file header")]
     InvalidHeader,
-    
+
     #[error("File is empty")]
     EmptyFile,
-    
+
     #[error("Unsupported file type: {0}")]
     UnsupportedFileType(String),
-    
+
     #[error("Failed to detect encryption key")]
     KeyDetectionFailed,
 }
@@ -247,25 +252,73 @@ mod tests {
 
     #[test]
     fn test_file_extension_conversion() {
-        assert_eq!(FileExtension::RPGMVP.convert(true, RPGMakerVersion::MV), FileExtension::PNG);
-        assert_eq!(FileExtension::RPGMVO.convert(true, RPGMakerVersion::MV), FileExtension::OGG);
-        assert_eq!(FileExtension::RPGMVM.convert(true, RPGMakerVersion::MV), FileExtension::M4A);
-        assert_eq!(FileExtension::PNG_.convert(true, RPGMakerVersion::MZ), FileExtension::PNG);
-        assert_eq!(FileExtension::OGG_.convert(true, RPGMakerVersion::MZ), FileExtension::OGG);
-        assert_eq!(FileExtension::M4A_.convert(true, RPGMakerVersion::MZ), FileExtension::M4A);
+        assert_eq!(
+            FileExtension::RPGMVP.convert(true, RPGMakerVersion::MV),
+            FileExtension::PNG
+        );
+        assert_eq!(
+            FileExtension::RPGMVO.convert(true, RPGMakerVersion::MV),
+            FileExtension::OGG
+        );
+        assert_eq!(
+            FileExtension::RPGMVM.convert(true, RPGMakerVersion::MV),
+            FileExtension::M4A
+        );
+        assert_eq!(
+            FileExtension::PNG_.convert(true, RPGMakerVersion::MZ),
+            FileExtension::PNG
+        );
+        assert_eq!(
+            FileExtension::OGG_.convert(true, RPGMakerVersion::MZ),
+            FileExtension::OGG
+        );
+        assert_eq!(
+            FileExtension::M4A_.convert(true, RPGMakerVersion::MZ),
+            FileExtension::M4A
+        );
 
-        assert_eq!(FileExtension::PNG.convert(false, RPGMakerVersion::MV), FileExtension::RPGMVP);
-        assert_eq!(FileExtension::OGG.convert(false, RPGMakerVersion::MV), FileExtension::RPGMVO);
-        assert_eq!(FileExtension::M4A.convert(false, RPGMakerVersion::MV), FileExtension::RPGMVM);
+        assert_eq!(
+            FileExtension::PNG.convert(false, RPGMakerVersion::MV),
+            FileExtension::RPGMVP
+        );
+        assert_eq!(
+            FileExtension::OGG.convert(false, RPGMakerVersion::MV),
+            FileExtension::RPGMVO
+        );
+        assert_eq!(
+            FileExtension::M4A.convert(false, RPGMakerVersion::MV),
+            FileExtension::RPGMVM
+        );
 
-        assert_eq!(FileExtension::PNG.convert(false, RPGMakerVersion::MZ), FileExtension::PNG_);
-        assert_eq!(FileExtension::OGG.convert(false, RPGMakerVersion::MZ), FileExtension::OGG_);
-        assert_eq!(FileExtension::M4A.convert(false, RPGMakerVersion::MZ), FileExtension::M4A_);
+        assert_eq!(
+            FileExtension::PNG.convert(false, RPGMakerVersion::MZ),
+            FileExtension::PNG_
+        );
+        assert_eq!(
+            FileExtension::OGG.convert(false, RPGMakerVersion::MZ),
+            FileExtension::OGG_
+        );
+        assert_eq!(
+            FileExtension::M4A.convert(false, RPGMakerVersion::MZ),
+            FileExtension::M4A_
+        );
 
-        assert_eq!(FileExtension::RPGMVP.convert(false, RPGMakerVersion::MZ), FileExtension::RPGMVP);
-        assert_eq!(FileExtension::PNG_.convert(false, RPGMakerVersion::MV), FileExtension::PNG_);
-        assert_eq!(FileExtension::RPGMVO.convert(false, RPGMakerVersion::MZ), FileExtension::RPGMVO);
-        assert_eq!(FileExtension::OGG_.convert(false, RPGMakerVersion::MV), FileExtension::OGG_);
+        assert_eq!(
+            FileExtension::RPGMVP.convert(false, RPGMakerVersion::MZ),
+            FileExtension::RPGMVP
+        );
+        assert_eq!(
+            FileExtension::PNG_.convert(false, RPGMakerVersion::MV),
+            FileExtension::PNG_
+        );
+        assert_eq!(
+            FileExtension::RPGMVO.convert(false, RPGMakerVersion::MZ),
+            FileExtension::RPGMVO
+        );
+        assert_eq!(
+            FileExtension::OGG_.convert(false, RPGMakerVersion::MV),
+            FileExtension::OGG_
+        );
     }
 
     #[test]
@@ -276,9 +329,18 @@ mod tests {
         assert_eq!(FileExtension::from_str("m4a"), Some(FileExtension::M4A));
 
         // Test RPG Maker MV extensions
-        assert_eq!(FileExtension::from_str("rpgmvp"), Some(FileExtension::RPGMVP));
-        assert_eq!(FileExtension::from_str("rpgmvo"), Some(FileExtension::RPGMVO));
-        assert_eq!(FileExtension::from_str("rpgmvm"), Some(FileExtension::RPGMVM));
+        assert_eq!(
+            FileExtension::from_str("rpgmvp"),
+            Some(FileExtension::RPGMVP)
+        );
+        assert_eq!(
+            FileExtension::from_str("rpgmvo"),
+            Some(FileExtension::RPGMVO)
+        );
+        assert_eq!(
+            FileExtension::from_str("rpgmvm"),
+            Some(FileExtension::RPGMVM)
+        );
 
         // Test RPG Maker MZ extensions
         assert_eq!(FileExtension::from_str("png_"), Some(FileExtension::PNG_));
@@ -287,7 +349,10 @@ mod tests {
 
         // Test case insensitivity
         assert_eq!(FileExtension::from_str("PNG"), Some(FileExtension::PNG));
-        assert_eq!(FileExtension::from_str("RPGMVP"), Some(FileExtension::RPGMVP));
+        assert_eq!(
+            FileExtension::from_str("RPGMVP"),
+            Some(FileExtension::RPGMVP)
+        );
         assert_eq!(FileExtension::from_str("PNG_"), Some(FileExtension::PNG_));
 
         // Test invalid extension
@@ -316,4 +381,4 @@ mod tests {
         assert_eq!(FileExtension::RPGMVO.get_file_type(), FileType::Audio);
         assert_eq!(FileExtension::OGG_.get_file_type(), FileType::Audio);
     }
-} 
+}

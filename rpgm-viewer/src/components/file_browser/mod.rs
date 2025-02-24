@@ -46,7 +46,6 @@ impl Default for FileBrowser {
                 100,                      // max 100 thumb in cache
                 Duration::from_secs(300), // cache for 5 minutes
             ),
-            
         }
     }
 }

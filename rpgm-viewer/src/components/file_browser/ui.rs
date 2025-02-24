@@ -154,7 +154,7 @@ impl FileBrowser {
         }
 
         egui::ScrollArea::vertical()
-            .id_source("file_list_scroll") 
+            .id_source("file_list_scroll")
             .auto_shrink([false; 2])
             .stick_to_bottom(false)
             .show(ui, |ui| {
@@ -178,7 +178,9 @@ impl FileBrowser {
             return;
         }
 
-        let all_loaded = entries.iter().all(|entry| entry.is_folder || entry.thumbnail.is_some());
+        let all_loaded = entries
+            .iter()
+            .all(|entry| entry.is_folder || entry.thumbnail.is_some());
         if all_loaded {
             trace!("All thumbnails already loaded, skipping processing");
             return;
