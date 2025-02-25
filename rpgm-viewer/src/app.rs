@@ -45,7 +45,8 @@ impl eframe::App for ImageViewerApp {
                 ui.menu_button("File", |ui| {
                     if ui.button("Open Folder...").clicked() {
                         if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                            self.crypt_settings.set_current_directory(path);
+                            self.crypt_settings
+                                .set_current_directory(path, Some(&mut self.file_browser));
                         }
                     }
                     ui.separator();

@@ -64,7 +64,6 @@ impl FileBrowser {
                 }
             }
 
-            // Show search status
             if !self.search_query.is_empty() {
                 if let Some(search_results) = &self.search_results_cache {
                     ui.label(format!("{} results", search_results.1.len()));
@@ -159,7 +158,6 @@ impl FileBrowser {
     }
 
     fn entry_matches_search(&self, entry: &FileEntry, root: &Path, query: &str) -> bool {
-        // Try to match against relative path
         if let Ok(relative_path) = entry.path.strip_prefix(root) {
             if relative_path
                 .to_string_lossy()
@@ -170,7 +168,6 @@ impl FileBrowser {
             }
         }
 
-        // Fall back to just the name
         entry.name().to_lowercase().contains(query)
     }
 

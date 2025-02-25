@@ -28,7 +28,8 @@ impl DroppedFile {
                         debug!("Dropped path: {}", path.display());
                         if path.is_dir() {
                             trace!("Setting current directory: {}", path.display());
-                            crypt_manager.set_current_directory(path.to_path_buf());
+                            crypt_manager
+                                .set_current_directory(path.to_path_buf(), Some(file_browser));
                         } else if let Some(ext) = path.extension() {
                             trace!("Dropped file extension: {}", ext.to_string_lossy());
                             if let Some(ext_str) = ext.to_str() {

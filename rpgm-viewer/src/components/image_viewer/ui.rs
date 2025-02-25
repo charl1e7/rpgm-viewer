@@ -58,7 +58,7 @@ impl ImageViewer {
                     ui.add_space(20.0);
                     if ui.button("📁 Open Folder...").clicked() {
                         if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                            crypt_manager.set_current_directory(path);
+                            crypt_manager.set_current_directory(path, Some(file_browser));
                         }
                     }
                     ui.add_space(10.0);
