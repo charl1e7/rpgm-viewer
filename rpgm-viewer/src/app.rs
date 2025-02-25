@@ -21,10 +21,14 @@ pub struct ImageViewerApp {
 impl ImageViewerApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         if let Some(storage) = cc.storage {
-            let app: Self = eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
+            let mut app: Self = eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
+            app.audio = AudioState::new();
             return app;
         }
-        Default::default()
+
+        let mut app = Self::default();
+        app.audio = AudioState::new();
+        app
     }
 }
 
