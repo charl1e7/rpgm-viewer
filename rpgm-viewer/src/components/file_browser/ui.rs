@@ -1,7 +1,7 @@
 use super::file_entry::FileEntry;
 use super::FileBrowser;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::components::audio::AudioState;
 use crate::components::crypt_manager::CryptManager;
@@ -47,7 +47,9 @@ impl FileBrowser {
     fn show_search_bar(&mut self, ui: &mut egui::Ui) -> bool {
         ui.horizontal(|ui| {
             ui.label("🔍");
-            let changed = ui.text_edit_singleline(&mut self.search_query).changed();
+            let search_field = ui.text_edit_singleline(&mut self.search_query);
+            let changed = search_field.changed();
+
             if changed {
                 self.all_thumbnails_loaded = false;
             }
@@ -61,6 +63,14 @@ impl FileBrowser {
                     return true;
                 }
             }
+
+            // Show search status
+            if !self.search_query.is_empty() {
+                if let Some(search_results) = &self.search_results_cache {
+                    ui.label(format!("{} results", search_results.1.len()));
+                }
+            }
+
             changed
         })
         .inner
@@ -123,9 +133,9 @@ impl FileBrowser {
     fn get_filtered_entries(&mut self, root: &Path) -> Vec<FileEntry> {
         if self.search_query.is_empty() {
             self.search_results_cache = None;
-            self.entries_cache.as_ref().unwrap().clone()
+            return self.entries_cache.as_ref().unwrap().clone();
         } else {
-            self.update_search_results(root)
+            return self.update_search_results(root);
         }
     }
 
@@ -133,26 +143,35 @@ impl FileBrowser {
         if self.search_results_cache.is_none()
             || self.search_results_cache.as_ref().unwrap().0 != self.search_query
         {
+            debug!("Updating search results for query: {}", self.search_query);
             let all_entries = FileEntry::recursive_collect_all_entries_flat(root, 0);
             let query = self.search_query.to_lowercase();
 
             let filtered_entries: Vec<_> = all_entries
                 .into_iter()
-                .filter(|entry| {
-                    if let Ok(relative_path) = entry.path.strip_prefix(root) {
-                        relative_path
-                            .to_string_lossy()
-                            .to_lowercase()
-                            .contains(&query)
-                    } else {
-                        entry.name().to_lowercase().contains(&query)
-                    }
-                })
+                .filter(|entry| self.entry_matches_search(entry, root, &query))
                 .collect();
 
+            debug!("Found {} matches for '{}'", filtered_entries.len(), query);
             self.search_results_cache = Some((self.search_query.clone(), filtered_entries));
         }
         self.search_results_cache.as_ref().unwrap().1.clone()
+    }
+
+    fn entry_matches_search(&self, entry: &FileEntry, root: &Path, query: &str) -> bool {
+        // Try to match against relative path
+        if let Ok(relative_path) = entry.path.strip_prefix(root) {
+            if relative_path
+                .to_string_lossy()
+                .to_lowercase()
+                .contains(query)
+            {
+                return true;
+            }
+        }
+
+        // Fall back to just the name
+        entry.name().to_lowercase().contains(query)
     }
 
     fn show_file_list(
@@ -172,8 +191,20 @@ impl FileBrowser {
             }
         }
 
+        self.render_file_list(ui, &entries, ctx, crypt_manager, audio, ui_settings);
+    }
+
+    fn render_file_list(
+        &mut self,
+        ui: &mut egui::Ui,
+        entries: &[FileEntry],
+        ctx: &egui::Context,
+        crypt_manager: &mut CryptManager,
+        audio: &mut AudioState,
+        ui_settings: &UiSettings,
+    ) {
         egui::ScrollArea::vertical()
-            .id_source("file_list_scroll")
+            .id_salt("file_list_scroll")
             .auto_shrink([false; 2])
             .stick_to_bottom(false)
             .show(ui, |ui| {
@@ -201,19 +232,17 @@ impl FileBrowser {
             return;
         }
 
-        let no_thumb_count = entries
+        let image_entries_without_thumbnails: Vec<_> = entries
             .iter()
             .filter(|e| {
                 !e.is_folder
                     && e.thumbnail.is_none()
-                    && e.path.extension().map_or(false, |ext| {
-                        matches!(
-                            ext.to_str().unwrap_or(""),
-                            "png" | "png_" | "rpgmvp" | "jpg" | "jpeg" | "gif" | "bmp" | "webp"
-                        )
-                    })
+                    && self.is_image_file(&e.path)
+                    && !self.thumbnail_cache.is_failed(&e.path)
             })
-            .count();
+            .collect();
+
+        let no_thumb_count = image_entries_without_thumbnails.len();
 
         if no_thumb_count == 0 && !self.thumbnail_cache.has_pending_loads() {
             self.all_thumbnails_loaded = true;
@@ -228,46 +257,51 @@ impl FileBrowser {
         let loaded_thumbnails = self.thumbnail_cache.process_results(ctx);
 
         if !loaded_thumbnails.is_empty() {
-            info!("Received {} new thumbnails", loaded_thumbnails.len());
-
-            for (path, texture) in loaded_thumbnails {
-                let mut found = false;
-                for entry in entries.iter_mut() {
-                    if entry.path == path {
-                        entry.thumbnail = Some(texture.clone());
-                        found = true;
-                        break;
-                    }
-                }
-                if !found {
-                    debug!("Thumbnail for file not found in the list: {:?}", path);
-                }
-            }
+            debug!("Received {} new thumbnails", loaded_thumbnails.len());
+            self.apply_loaded_thumbnails(entries, loaded_thumbnails);
         }
 
+        self.request_visible_thumbnails(ui, entries, decrypter, ui_settings);
+
+        self.update_caches(entries);
+    }
+
+    fn apply_loaded_thumbnails(
+        &mut self,
+        entries: &mut Vec<FileEntry>,
+        loaded_thumbnails: Vec<(PathBuf, egui::TextureHandle)>,
+    ) {
+        for (path, texture) in loaded_thumbnails {
+            let mut found = false;
+            for entry in entries.iter_mut() {
+                if entry.path == path {
+                    entry.thumbnail = Some(texture.clone());
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                debug!("Thumbnail for file not found in the list: {:?}", path);
+            }
+        }
+    }
+
+    fn request_visible_thumbnails(
+        &mut self,
+        ui: &mut egui::Ui,
+        entries: &mut Vec<FileEntry>,
+        decrypter: &Decrypter,
+        ui_settings: &UiSettings,
+    ) {
         let visible_rect = ui.clip_rect();
         let mut requested = 0;
 
         for entry in entries.iter_mut() {
-            if entry.is_folder {
-                continue;
-            }
-
-            if !entry.path.extension().map_or(false, |ext| {
-                matches!(
-                    ext.to_str().unwrap_or(""),
-                    "png" | "png_" | "rpgmvp" | "jpg" | "jpeg" | "gif" | "bmp" | "webp"
-                )
-            }) {
-                continue;
-            }
-
-            if entry.thumbnail.is_some() {
-                continue;
-            }
-
-            if self.thumbnail_cache.is_failed(&entry.path) {
-                trace!("Skipping file with loading error: {:?}", entry.path);
+            if entry.is_folder
+                || !self.is_image_file(&entry.path)
+                || entry.thumbnail.is_some()
+                || self.thumbnail_cache.is_failed(&entry.path)
+            {
                 continue;
             }
 
@@ -287,8 +321,6 @@ impl FileBrowser {
         if requested > 0 {
             debug!("Requested {} new thumbnails", requested);
         }
-
-        self.update_caches(entries);
     }
 
     fn update_caches(&mut self, entries: &Vec<FileEntry>) {
@@ -390,15 +422,17 @@ impl FileBrowser {
         ui.separator();
 
         if ui.button("Encrypt All Files").clicked() {
-            if let Err(e) = crypt_manager.encrypt_folder(&entry.path, self) {
-                eprintln!("Failed to encrypt folder: {}", e);
+            match crypt_manager.encrypt_folder(&entry.path, self) {
+                Ok(_) => info!("Successfully encrypted folder: {:?}", entry.path),
+                Err(e) => error!("Failed to encrypt folder {:?}: {}", entry.path, e),
             }
             ui.close_menu();
         }
 
         if ui.button("Decrypt All Files").clicked() {
-            if let Err(e) = crypt_manager.decrypt_folder(&entry.path, self) {
-                eprintln!("Failed to decrypt folder: {}", e);
+            match crypt_manager.decrypt_folder(&entry.path, self) {
+                Ok(_) => info!("Successfully decrypted folder: {:?}", entry.path),
+                Err(e) => error!("Failed to decrypt folder {:?}: {}", entry.path, e),
             }
             ui.close_menu();
         }
@@ -423,23 +457,13 @@ impl FileBrowser {
             }
         }
 
-        let icon = if entry.path.extension().map_or(false, |ext| {
-            matches!(
-                ext.to_str().unwrap_or(""),
-                "png" | "png_" | "rpgmvp" | "jpg" | "jpeg" | "gif" | "bmp" | "webp"
-            )
-        }) {
+        let icon = if self.is_image_file(&entry.path) {
             if entry.is_encrypted {
                 "🔒"
             } else {
                 "🖼"
             }
-        } else if entry.path.extension().map_or(false, |ext| {
-            matches!(
-                ext.to_str().unwrap_or(""),
-                "ogg" | "ogg_" | "rpgmvo" | "mp3"
-            )
-        }) {
+        } else if self.is_audio_file(&entry.path) {
             if entry.is_encrypted {
                 "🔒🎵"
             } else {
@@ -451,6 +475,24 @@ impl FileBrowser {
         ui.label(icon);
     }
 
+    fn is_image_file(&self, path: &Path) -> bool {
+        path.extension().map_or(false, |ext| {
+            matches!(
+                ext.to_str().unwrap_or(""),
+                "png" | "png_" | "rpgmvp" | "jpg" | "jpeg" | "gif" | "bmp" | "webp"
+            )
+        })
+    }
+
+    fn is_audio_file(&self, path: &Path) -> bool {
+        path.extension().map_or(false, |ext| {
+            matches!(
+                ext.to_str().unwrap_or(""),
+                "ogg" | "ogg_" | "rpgmvo" | "mp3"
+            )
+        })
+    }
+
     fn handle_file_click(
         &mut self,
         entry: &FileEntry,
@@ -459,14 +501,9 @@ impl FileBrowser {
         audio: &mut AudioState,
     ) {
         let decrypter = crypt_manager.get_decrypter().unwrap();
-        if entry.path.extension().map_or(false, |ext| {
-            matches!(
-                ext.to_str().unwrap_or(""),
-                "ogg" | "ogg_" | "rpgmvo" | "mp3"
-            )
-        }) {
+        if self.is_audio_file(&entry.path) {
             if let Err(e) = audio.play_audio(&entry.path, decrypter) {
-                eprintln!("Failed to play audio: {}", e);
+                error!("Failed to play audio file {:?}: {}", entry.path, e);
             }
         } else {
             match ImageViewer::load_image(&entry.path, ctx, Some(&decrypter)) {
@@ -505,14 +542,14 @@ impl FileBrowser {
         if entry.is_encrypted {
             if ui.button("Decrypt").clicked() {
                 if let Err(e) = crypt_manager.decrypt_image(&entry.path, self) {
-                    eprintln!("Failed to decrypt: {}", e);
+                    error!("Failed to decrypt {:?}: {}", entry.path, e);
                 }
                 ui.close_menu();
             }
         } else {
             if ui.button("Encrypt").clicked() {
                 if let Err(e) = crypt_manager.encrypt_image(&entry.path, self) {
-                    eprintln!("Failed to encrypt: {}", e);
+                    error!("Failed to encrypt {:?}: {}", entry.path, e);
                 }
                 ui.close_menu();
             }
