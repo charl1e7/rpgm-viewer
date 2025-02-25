@@ -1,9 +1,10 @@
 use super::UiSettings;
+use crate::components::file_browser::FileBrowser;
 
 pub struct UiSettingsWindow;
 
 impl UiSettingsWindow {
-    pub fn show(ctx: &egui::Context, settings: &mut UiSettings) {
+    pub fn show(ctx: &egui::Context, settings: &mut UiSettings, file_browser: &mut FileBrowser) {
         egui::Window::new("UI Settings")
             .open(&mut settings.show_ui_settings)
             .show(ctx, |ui| {
@@ -13,6 +14,27 @@ impl UiSettingsWindow {
                         egui::Slider::new(&mut settings.thumbnail_size, 16.0..=128.0)
                             .text("Thumbnail Size"),
                     );
+
+                    ui.collapsing("Thumbnail Cache Settings", |ui| {
+                        ui.add(
+                            egui::Slider::new(&mut settings.thumbnail_cache_size, 10..=1000)
+                                .text("Max Thumbnails in Cache"),
+                        );
+
+                        ui.add(
+                            egui::Slider::new(&mut settings.thumbnail_cache_ttl_seconds, 30..=3600)
+                                .text("Cache Time (sec)"),
+                        );
+
+                        ui.add(
+                            egui::Slider::new(&mut settings.thumbnail_compression_size, 32..=1024)
+                                .text("Thumbnail Resolution"),
+                        );
+
+                        if ui.button("Clear Thumbnail Cache").clicked() {
+                            file_browser.clear_thumbnail_cache();
+                        }
+                    });
                 }
 
                 ui.add(egui::Slider::new(&mut settings.ui_scale, 1.0..=3.0).text("UI Scale"));

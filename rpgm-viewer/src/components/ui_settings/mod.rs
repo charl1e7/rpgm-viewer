@@ -10,6 +10,9 @@ pub struct UiSettings {
     pub font_size: f32,
     pub show_settings: bool,
     pub show_ui_settings: bool,
+    pub thumbnail_cache_size: usize,
+    pub thumbnail_cache_ttl_seconds: u64,
+    pub thumbnail_compression_size: u32,
 }
 
 impl Default for UiSettings {
@@ -22,6 +25,9 @@ impl Default for UiSettings {
             font_size: 15.0,
             show_settings: false,
             show_ui_settings: false,
+            thumbnail_cache_size: 100,
+            thumbnail_cache_ttl_seconds: 300,
+            thumbnail_compression_size: 256,
         }
     }
 }
@@ -86,5 +92,17 @@ impl UiSettings {
 
     pub fn toggle_thumbnails(&mut self) {
         self.show_thumbnails = !self.show_thumbnails;
+    }
+
+    pub fn get_thumbnail_cache_size(&self) -> usize {
+        self.thumbnail_cache_size
+    }
+
+    pub fn get_thumbnail_cache_ttl(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(self.thumbnail_cache_ttl_seconds)
+    }
+
+    pub fn get_thumbnail_compression_size(&self) -> u32 {
+        self.thumbnail_compression_size
     }
 }

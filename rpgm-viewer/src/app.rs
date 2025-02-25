@@ -68,7 +68,7 @@ impl eframe::App for ImageViewerApp {
         // Show UI settings window
         if self.ui_settings.show_ui_settings {
             use crate::components::ui_settings::ui::UiSettingsWindow;
-            UiSettingsWindow::show(ctx, &mut self.ui_settings);
+            UiSettingsWindow::show(ctx, &mut self.ui_settings, &mut self.file_browser);
         }
 
         // Show crypt settings window
