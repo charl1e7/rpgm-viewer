@@ -488,7 +488,7 @@ impl FileBrowser {
         path.extension().map_or(false, |ext| {
             matches!(
                 ext.to_str().unwrap_or(""),
-                "ogg" | "ogg_" | "rpgmvo" | "mp3"
+                "ogg" | "ogg_" | "rpgmvo" | "mp3" | "m4a" | "m4a_" | "rpgmvm"
             )
         })
     }

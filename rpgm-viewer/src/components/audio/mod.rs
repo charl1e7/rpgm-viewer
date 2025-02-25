@@ -80,7 +80,10 @@ impl AudioState {
         self.stop_audio();
 
         let data = if path.extension().map_or(false, |ext| {
-            matches!(ext.to_str().unwrap_or(""), "ogg_" | "rpgmvo")
+            matches!(
+                ext.to_str().unwrap_or(""),
+                "ogg_" | "rpgmvo" | "m4a_" | "rpgmvm"
+            )
         }) {
             let file_data = std::fs::read(path)
                 .map_err(|e| format!("Failed to read encrypted audio file: {}", e))?;
@@ -98,6 +101,9 @@ impl AudioState {
         let mut hint = Hint::new();
         if let Some(ext) = path.extension() {
             hint.with_extension(ext.to_str().unwrap_or(""));
+            if ext.eq_ignore_ascii_case("m4a") {
+                hint.mime_type("audio/mp4");
+            }
         }
 
         let meta_opts = MetadataOptions::default();

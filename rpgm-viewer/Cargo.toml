@@ -29,7 +29,7 @@ walkdir = "2.5"
 rpgm-enc = { path="../rpgm-enc" }
 cpal = "0.15.3"
 rodio = "0.20.1"
-symphonia = "0.5.4"
+symphonia = { version = "0.5.4", features = ["aac", "isomp4"] }
 egui_logger = "0.6.3"
 
 # native:
