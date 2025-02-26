@@ -41,7 +41,9 @@ wasm-bindgen-futures = "0.4"
 web-sys = "0.3"              # to access the DOM (to hide the loading text)
 
 [profile.release]
-opt-level = 2 # fast and small wasm
+codegen-units = 1
+lto = true
+opt-level = 3
 
 # Optimize all dependencies even in debug builds:
 [profile.dev.package."*"]
