@@ -131,7 +131,10 @@ impl CryptManager {
         }
 
         self.current_folder = Some(path.clone());
-        self.settings.insert(path.clone(), CryptSettings::default());
+        let mut settings = CryptSettings::default();
+        settings.decrypt_path = Some(path.clone());
+        self.settings.insert(path.clone(), settings);
+
         if let Some(crypt_settings) = self.get_settings() {
             if crypt_settings.encryption_key.is_none() {
                 let walker = walkdir::WalkDir::new(&path)
