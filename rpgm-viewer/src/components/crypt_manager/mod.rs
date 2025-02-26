@@ -247,7 +247,7 @@ impl CryptManager {
         path: &std::path::Path,
         file_browser: &mut FileBrowser,
     ) -> Result<(), String> {
-        let entries = FileEntry::recursive_collect_entries_flat(path, 0, &[]);
+        let entries = FileEntry::recursive_collect_all_entries_flat(path, 0);
         let mut errors = Vec::new();
 
         for entry in entries {
@@ -270,7 +270,7 @@ impl CryptManager {
         path: &std::path::Path,
         file_browser: &mut FileBrowser,
     ) -> Result<(), String> {
-        let entries = FileEntry::recursive_collect_entries_flat(path, 0, &[]);
+        let entries = FileEntry::recursive_collect_all_entries_flat(path, 0);
         let mut errors = Vec::new();
 
         for entry in entries {
