@@ -9,101 +9,6 @@ permissions:
   contents: write
   
 jobs:
-#  check:
-#    name: Check
-#    runs-on: ubuntu-latest
-#    steps:
-#      - uses: actions/checkout@v4
-#      - uses: actions-rs/toolchain@v1
-#        with:
-#          profile: minimal
-#          toolchain: stable
-#          override: true
-#      - uses: actions-rs/cargo@v1
-#        with:
-#          command: check
-#          args: --all-features
-
-#  check_wasm:
-#    name: Check wasm32
-#    runs-on: ubuntu-latest
-#    steps:
-#      - uses: actions/checkout@v4
-#      - uses: actions-rs/toolchain@v1
-#        with:
-#          profile: minimal
-#          toolchain: stable
-#          target: wasm32-unknown-unknown
-#          override: true
-#      - uses: actions-rs/cargo@v1
-#        with:
-#          command: check
-#          args: --all-features --lib --target wasm32-unknown-unknown
-
-#  test:
-#    name: Test Suite
-#    runs-on: ubuntu-latest
-#    steps:
-#      - uses: actions/checkout@v4
-#      - uses: actions-rs/toolchain@v1
-#        with:
-#          profile: minimal
-#          toolchain: stable
-#          override: true
-#      - run: sudo apt-get install libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
-#      - uses: actions-rs/cargo@v1
-#        with:
-#          command: test
-#          args: --lib
-
-#  fmt:
-#    name: Rustfmt
-#    runs-on: ubuntu-latest
-#    steps:
-#      - uses: actions/checkout@v4
-#      - uses: actions-rs/toolchain@v1
-#        with:
-#          profile: minimal
-#          toolchain: stable
-#          override: true
-#          components: rustfmt
-#      - uses: actions-rs/cargo@v1
-#        with:
-#          command: fmt
-#          args: --all -- --check
-
-#  clippy:
-#    name: Clippy
-#    runs-on: ubuntu-latest
-#    steps:
-#      - uses: actions/checkout@v4
-#      - uses: actions-rs/toolchain@v1
-#        with:
-#          profile: minimal
-#          toolchain: stable
-#          override: true
-#          components: clippy
-#      - uses: actions-rs/cargo@v1
-#        with:
-#          command: clippy
-#          args: -- -D warnings
-
-#  trunk:
-#    name: trunk
-#    runs-on: ubuntu-latest
-#    steps:
-#      - uses: actions/checkout@v4
-#      - uses: actions-rs/toolchain@v1
-#        with:
-#          profile: minimal
-#          toolchain: 1.81.0
-#          target: wasm32-unknown-unknown
-#          override: true
-#      - name: Download and install Trunk binary
-#        run: wget -qO- https://github.com/thedodd/trunk/releases/latest/download/trunk-x86_64-unknown-linux-gnu.tar.gz | tar -xzf-
-#      - name: Build
-#        run: ./trunk build
-
   build:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -156,7 +61,10 @@ jobs:
       working-directory: ./rpgm-viewer
       env:
         CROSS_DEB_PACKAGES: libasound2-dev
+        PKG_CONFIG_PATH: /usr/lib/${{ matrix.TARGET }}/pkgconfig:/usr/lib/pkgconfig
       run: |
+        cross run --target ${{ matrix.TARGET }} -- sh -c 'ls -l /usr/lib/${{ matrix.TARGET }}/pkgconfig/ || echo "Directory not found"'
+        cross run --target ${{ matrix.TARGET }} -- sh -c 'pkg-config --modversion alsa || echo "pkg-config failed"'
         cross build --verbose --release --target=${{ matrix.TARGET }}
 
     - name: Rename
