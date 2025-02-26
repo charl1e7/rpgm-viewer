@@ -25,7 +25,7 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "Image Viewer",
         native_options,
-        Box::new(|cc| Ok(Box::new(rpg_viewer::ImageViewerApp::new(cc)))),
+        Box::new(|cc| Ok(Box::new(rpgm_viewer::ImageViewerApp::new(cc)))),
     )
 }
 
@@ -55,7 +55,7 @@ fn main() {
             .start(
                 canvas,
                 web_options,
-                Box::new(|cc| Ok(Box::new(rpg_viewer::ImageViewerApp::new(cc)))),
+                Box::new(|cc| Ok(Box::new(rpgm_viewer::ImageViewerApp::new(cc)))),
             )
             .await;
 

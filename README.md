@@ -59,8 +59,8 @@ If you prefer to compile the app yourself or need to customize it, follow these 
      cargo build --release
      ```
    - Run the app:
-     - Windows: `target\release\rpg_viewer.exe`
-     - Linux/macOS: `./target/release/rpg_viewer`
+     - Windows: `target\release\rpgm_viewer.exe`
+     - Linux/macOS: `./target/release/rpgm_viewer`
 
 ---
 

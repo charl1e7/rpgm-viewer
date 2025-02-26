@@ -1,5 +1,5 @@
 [package]
-name = "rpg_viewer"
+name = "rpgm-viewer"
 version = "0.1.0"
 authors = ["Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"]
 edition = "2021"
@@ -39,18 +39,6 @@ env_logger = "0.11"
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen-futures = "0.4"
 web-sys = "0.3"              # to access the DOM (to hide the loading text)
-
-[profile.release]
-codegen-units = 1
-lto = true
-opt-level = 3
-
-# Optimize all dependencies even in debug builds:
-[profile.dev.package."*"]
-opt-level = 2
-
-
-[patch.crates-io]
 
 # If you want to use the bleeding edge version of egui and eframe:
 # egui = { git = "https://github.com/emilk/egui", branch = "master" }
