@@ -66,18 +66,15 @@ impl eframe::App for ImageViewerApp {
             });
         });
 
-        // Show UI settings window
         if self.ui_settings.show_ui_settings {
             use crate::components::ui_settings::ui::UiSettingsWindow;
             UiSettingsWindow::show(ctx, &mut self.ui_settings, &mut self.file_browser);
         }
 
-        // Show crypt settings window
         if self.crypt_settings.show_settings() {
             CryptSettingsWindow::show(ctx, &mut self.crypt_settings);
         }
 
-        // Left panel with file browser
         egui::SidePanel::left("files_panel")
             .resizable(true)
             .default_width(200.0)
@@ -91,12 +88,17 @@ impl eframe::App for ImageViewerApp {
                 );
             });
 
-        // Show image viewer
+        if self.audio.is_audio_loaded() {
+            egui::TopBottomPanel::bottom("audio_player")
+                .min_height(60.0)
+                .show(ctx, |ui| {
+                    self.audio.show(ui);
+                });
+        }
+
         self.image_viewer
             .show(ctx, &mut self.crypt_settings, &mut self.file_browser);
-        self.audio.show(ctx);
 
-        // Show logger window if enabled
         if self.ui_settings.show_logger {
             egui::Window::new("Log")
                 .open(&mut self.ui_settings.show_logger)
@@ -105,7 +107,6 @@ impl eframe::App for ImageViewerApp {
                 });
         }
 
-        // dnd
         self.dropped_file
             .show(ctx, &mut self.crypt_settings, &mut self.file_browser);
     }

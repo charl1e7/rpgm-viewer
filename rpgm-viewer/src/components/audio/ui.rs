@@ -3,28 +3,7 @@ use egui::{Color32, Frame, Id, RichText, Rounding, Stroke, Vec2};
 use std::time::Duration;
 
 impl AudioState {
-    pub fn show(&mut self, ctx: &egui::Context) {
-        if self.current_audio.is_some() {
-            egui::TopBottomPanel::bottom("audio_player")
-                .frame(
-                    Frame::default()
-                        .fill(ctx.style().visuals.extreme_bg_color)
-                        .inner_margin(10.0)
-                        .shadow(egui::epaint::Shadow {
-                            offset: [0, 2],
-                            blur: 5,
-                            spread: 1,
-                            color: Color32::from_black_alpha(40),
-                        })
-                        .corner_radius(4),
-                )
-                .show(ctx, |ui| {
-                    self.show_audio_player(ui);
-                });
-        }
-    }
-
-    fn show_audio_player(&mut self, ui: &mut egui::Ui) {
+    pub fn show(&mut self, ui: &mut egui::Ui) {
         let metadata = self.get_current_metadata();
         let current_time = self.get_current_time();
         let total_duration = metadata.duration;

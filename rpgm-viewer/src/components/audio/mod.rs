@@ -319,4 +319,12 @@ impl AudioState {
     pub fn get_volume(&self) -> f32 {
         *self.volume.lock().unwrap()
     }
+
+    pub fn is_playing(&self) -> bool {
+        self.is_playing
+    }
+
+    pub fn is_audio_loaded(&self) -> bool {
+        self.current_audio.is_some()
+    }
 }
