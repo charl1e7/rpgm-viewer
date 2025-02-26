@@ -34,6 +34,8 @@ pub struct FileBrowser {
     last_show_thumbnails: bool,
     #[serde(skip)]
     last_thumbnail_compression_size: u32,
+    #[serde(skip)]
+    pub show_delete_confirmation: Option<(PathBuf, bool)>,
 }
 
 impl Default for FileBrowser {
@@ -55,6 +57,7 @@ impl Default for FileBrowser {
             last_thumbnail_ttl_secs: ui_settings.get_thumbnail_cache_ttl().as_secs(),
             last_show_thumbnails: ui_settings.show_thumbnails,
             last_thumbnail_compression_size: ui_settings.get_thumbnail_compression_size(),
+            show_delete_confirmation: None,
         }
     }
 }

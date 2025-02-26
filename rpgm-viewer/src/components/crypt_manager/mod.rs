@@ -126,7 +126,6 @@ impl CryptManager {
     pub fn set_current_directory(&mut self, path: PathBuf, file_browser: Option<&mut FileBrowser>) {
         info!("Setting current directory to: {}", path.display());
 
-        // Reset the file browser cache if provided
         if let Some(browser) = file_browser {
             browser.reset_cache();
         }

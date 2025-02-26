@@ -42,6 +42,8 @@ impl FileBrowser {
             let entries = self.get_filtered_entries(&root);
             self.show_file_list(ui, ctx, entries, crypt_manager, ui_settings, audio);
         }
+
+        self.show_delete_confirmation_dialog(ctx);
     }
 
     fn show_search_bar(&mut self, ui: &mut egui::Ui) -> bool {
@@ -433,6 +435,13 @@ impl FileBrowser {
             }
             ui.close_menu();
         }
+
+        ui.separator();
+
+        if ui.button("🗑 Delete").clicked() {
+            self.show_delete_confirmation = Some((entry.path.clone(), true));
+            ui.close_menu();
+        }
     }
 
     fn show_file_icon(&self, ui: &mut egui::Ui, entry: &FileEntry, ui_settings: &UiSettings) {
@@ -550,6 +559,59 @@ impl FileBrowser {
                 }
                 ui.close_menu();
             }
+        }
+
+        ui.separator();
+
+        if ui.button("🗑 Delete").clicked() {
+            self.show_delete_confirmation = Some((entry.path.clone(), false));
+            ui.close_menu();
+        }
+    }
+
+    fn show_delete_confirmation_dialog(&mut self, ctx: &egui::Context) {
+        if let Some((path, is_folder)) = &self.show_delete_confirmation {
+            let path = path.clone();
+            let is_folder = *is_folder;
+            egui::Window::new("Confirm Delete")
+                .collapsible(false)
+                .resizable(false)
+                .show(ctx, |ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.heading("⚠️Warning");
+                        ui.label(format!(
+                            "Are you sure you want to delete {}?",
+                            if is_folder {
+                                "this folder"
+                            } else {
+                                "this file"
+                            }
+                        ));
+                        ui.label(path.to_string_lossy().to_string());
+                        ui.add_space(10.0);
+                        ui.horizontal(|ui| {
+                            if ui.button("Cancel").clicked() {
+                                self.show_delete_confirmation = None;
+                            }
+                            if ui.button("Delete").clicked() {
+                                if is_folder {
+                                    if let Err(e) = std::fs::remove_dir_all(&path) {
+                                        error!("Failed to delete folder {:?}: {}", path, e);
+                                    } else {
+                                        info!("Successfully deleted folder: {:?}", path);
+                                    }
+                                } else {
+                                    if let Err(e) = std::fs::remove_file(&path) {
+                                        error!("Failed to delete file {:?}: {}", path, e);
+                                    } else {
+                                        info!("Successfully deleted file: {:?}", path);
+                                    }
+                                }
+                                self.show_delete_confirmation = None;
+                            }
+                        });
+                    });
+                });
         }
     }
 
