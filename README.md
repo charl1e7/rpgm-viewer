@@ -7,7 +7,8 @@
 
 
 A cross-platform desktop app for viewing, managing, and encrypting/decrypting images and audio files, with special support for RPG Maker encrypted formats (e.g., `.png_`, `.rpgmvp`, `.ogg_`, etc.). Built with Rust and powered by `egui`.
-![Preview](gitassets/screen1.png)
+
+<img src="gitassets/screen1.png" alt="Preview" width="500">
 
 ---
 
