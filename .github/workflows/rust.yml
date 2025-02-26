@@ -59,12 +59,12 @@ jobs:
 
     - name: Build
       working-directory: ./rpgm-viewer
-      env:
-        CROSS_DEB_PACKAGES: libasound2-dev
-        PKG_CONFIG_PATH: /usr/lib/${{ matrix.TARGET }}/pkgconfig:/usr/lib/pkgconfig
       run: |
+        export CROSS_DEB_PACKAGES=libasound2-dev
+        export PKG_CONFIG_PATH=/usr/lib/${{ matrix.TARGET }}/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig
         cross run --target ${{ matrix.TARGET }} -- sh -c 'ls -l /usr/lib/${{ matrix.TARGET }}/pkgconfig/ || echo "Directory not found"'
         cross run --target ${{ matrix.TARGET }} -- sh -c 'pkg-config --modversion alsa || echo "pkg-config failed"'
+        echo "PKG_CONFIG_PATH is set to: $PKG_CONFIG_PATH"
         cross build --verbose --release --target=${{ matrix.TARGET }}
 
     - name: Rename
