@@ -20,13 +20,13 @@ impl Default for UiSettings {
         Self {
             show_logger: false,
             show_thumbnails: true,
-            thumbnail_size: 32.0,
-            ui_scale: 1.2,
+            thumbnail_size: 128.0,
+            ui_scale: 1.3,
             font_size: 15.0,
             show_settings: false,
             show_ui_settings: false,
-            thumbnail_cache_size: 100,
-            thumbnail_cache_ttl_seconds: 300,
+            thumbnail_cache_size: 300,
+            thumbnail_cache_ttl_seconds: 3600,
             thumbnail_compression_size: 256,
         }
     }
