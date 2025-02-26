@@ -152,24 +152,25 @@ jobs:
         cargo install cross
 
     - name: Build
+      working-directory: ./rpgm-viewer
       run: |
         cross build --verbose --release --target=${{ matrix.TARGET }}
 
     - name: Rename
-      run: cp target/${{ matrix.TARGET }}/release/tvis${{ matrix.EXTENSION }} tvis-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
+      run: cp ./rpgm-viewer/target/${{ matrix.TARGET }}/release/rpg_viewer${{ matrix.EXTENSION }} rpg_viewer-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
 
     - uses: actions/upload-artifact@master
       with:
-        name: tvis-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
-        path: tvis-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
+        name: rpg_viewer-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
+        path: rpg_viewer-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
 
     - uses: svenstaro/upload-release-action@v2
       name: Upload binaries to release
       if: ${{ github.event_name == 'push' }}
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: tvis-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
-        asset_name: tvis-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
+        file: rpg_viewer-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
+        asset_name: rpg_viewer-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
         tag: ${{ github.ref_name }}
         release_name: Release ${{ github.ref_name }}
         overwrite: true
