@@ -152,6 +152,8 @@ jobs:
         cargo install cross
 
     - name: Build
+      env:
+        CROSS_NO_WARNINGS: 0
       run: |
         cross build --verbose --release --target=${{ matrix.TARGET }}
 
