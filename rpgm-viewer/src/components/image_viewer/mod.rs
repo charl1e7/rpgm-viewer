@@ -5,9 +5,7 @@ use log::{debug, error, trace};
 use rpgm_enc::Decrypter;
 
 #[derive(serde::Deserialize, serde::Serialize, Default)]
-pub struct ImageViewer {
-    file_notes: std::collections::HashMap<PathBuf, String>,
-}
+pub struct ImageViewer {}
 
 impl ImageViewer {
     pub fn load_image(

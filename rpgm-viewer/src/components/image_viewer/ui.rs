@@ -13,26 +13,7 @@ impl ImageViewer {
     ) {
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some((path, texture)) = &file_browser.current_image {
-                egui::containers::Frame::none().show(ui, |ui| {
-                    let available_height = ui.available_height();
-                    egui::TopBottomPanel::bottom("notes_panel")
-                        .resizable(true)
-                        .min_height(50.0)
-                        .default_height(available_height * 0.2)
-                        .show_inside(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                ui.label("Notes:");
-                                let note = self
-                                    .file_notes
-                                    .entry(path.clone())
-                                    .or_insert_with(String::new);
-                                ui.add_sized(
-                                    [ui.available_width(), ui.available_height() - 8.0],
-                                    egui::TextEdit::multiline(note),
-                                );
-                            });
-                        });
-
+                egui::containers::Frame::new().show(ui, |ui| {
                     ui.with_layout(
                         egui::Layout::centered_and_justified(egui::Direction::LeftToRight),
                         |ui| {
