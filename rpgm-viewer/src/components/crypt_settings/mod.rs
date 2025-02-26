@@ -9,6 +9,7 @@ pub struct CryptSettings {
     pub(crate) root_folder: Option<PathBuf>,
     pub(crate) expanded_folders: HashSet<PathBuf>,
     pub(crate) decrypt_path: Option<PathBuf>,
+    pub(crate) crypt_path: Option<PathBuf>,
     pub(crate) rpgmaker_version: rpgm_enc::RPGMakerVersion,
     pub(crate) show_settings: bool,
     pub(crate) decrypter: Option<rpgm_enc::Decrypter>,

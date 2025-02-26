@@ -133,6 +133,7 @@ impl CryptManager {
         self.current_folder = Some(path.clone());
         let mut settings = CryptSettings::default();
         settings.decrypt_path = Some(path.clone());
+        settings.crypt_path = Some(path.clone());
         self.settings.insert(path.clone(), settings);
 
         if let Some(crypt_settings) = self.get_settings() {
@@ -286,6 +287,7 @@ impl CryptManager {
             Err(errors.join("\n"))
         }
     }
+
     pub fn encrypt_image(
         &mut self,
         path: &std::path::Path,
@@ -294,8 +296,8 @@ impl CryptManager {
         let root = self.current_folder.clone().ok_or("No root folder set")?;
         let crypt_settings = self.get_settings().ok_or("No settings set")?;
         let rpgmaker_version = crypt_settings.rpgmaker_version;
-        let decrypt_path = crypt_settings
-            .decrypt_path
+        let crypt_path = crypt_settings
+            .crypt_path
             .clone()
             .unwrap_or_else(|| root.clone());
 
@@ -333,7 +335,7 @@ impl CryptManager {
                 .strip_prefix(&root)
                 .map_err(|e| format!("Failed to get relative path: {}", e))?;
 
-            let mut full_path = decrypt_path.join(relative_path);
+            let mut full_path = crypt_path.join(relative_path);
 
             if let Some(parent) = full_path.parent() {
                 std::fs::create_dir_all(parent)

@@ -21,6 +21,7 @@ impl CryptSettingsWindow {
 
                 let mut version = crypt_settings.rpgmaker_version;
                 let decrypt_path = crypt_settings.decrypt_path.clone();
+                let crypt_path = crypt_settings.crypt_path.clone();
                 let mut show_settings = crypt_settings.show_settings;
 
                 egui::Window::new("Crypt Settings")
@@ -68,9 +69,28 @@ impl CryptSettingsWindow {
                             }
                             if ui.button("Browse...").clicked() {
                                 if let Some(path) =
-                                    rfd::FileDialog::new().set_directory(root).pick_folder()
+                                    rfd::FileDialog::new().set_directory(&root).pick_folder()
                                 {
                                     settings.get_mut_settings().unwrap().decrypt_path = Some(path);
+                                }
+                            }
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Crypt Path:");
+                            let mut path = match &crypt_path {
+                                Some(path) => path.to_string_lossy().into_owned(),
+                                None => String::new(),
+                            };
+                            if ui.text_edit_singleline(&mut path).changed() {
+                                settings.get_mut_settings().unwrap().crypt_path =
+                                    Some(PathBuf::from(path));
+                            }
+                            if ui.button("Browse...").clicked() {
+                                if let Some(path) =
+                                    rfd::FileDialog::new().set_directory(&root).pick_folder()
+                                {
+                                    settings.get_mut_settings().unwrap().crypt_path = Some(path);
                                 }
                             }
                         });
