@@ -5,9 +5,6 @@ on:
 
 name: CI
 
-# env:
-  # RUSTFLAGS: -D warnings
-  # RUSTDOCFLAGS: -D warnings
 permissions:
   contents: write
   
@@ -115,16 +112,12 @@ jobs:
         include:
         - os: macos-latest
           TARGET: aarch64-apple-darwin
-
         - os: ubuntu-latest
           TARGET: aarch64-unknown-linux-gnu
-
         - os: ubuntu-latest
           TARGET: armv7-unknown-linux-gnueabihf
-
         - os: ubuntu-latest
           TARGET: x86_64-unknown-linux-gnu
-
         - os: windows-latest
           TARGET: x86_64-pc-windows-msvc
           EXTENSION: .exe
@@ -134,13 +127,12 @@ jobs:
       run: echo "${{ matrix.TARGET }}"
 
     - uses: actions/checkout@master
+
     - name: Install build dependencies - Rustup
       run: |
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain stable --profile default --target ${{ matrix.TARGET }} -y
         echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-    # For linux, it's necessary to use cross from the git repository to avoid glibc problems
-    # Ref: https://github.com/cross-rs/cross/issues/1510
     - name: Install ALSA development libraries (Ubuntu only)
       if: contains(matrix.os, 'ubuntu')
       run: |
@@ -162,6 +154,8 @@ jobs:
 
     - name: Build
       working-directory: ./rpgm-viewer
+      env:
+        CROSS_DEB_PACKAGES: libasound2-dev
       run: |
         cross build --verbose --release --target=${{ matrix.TARGET }}
 
