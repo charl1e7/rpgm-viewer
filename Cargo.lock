@@ -3085,7 +3085,24 @@ dependencies = [
 ]
 
 [[package]]
-name = "rpgm_viewer"
+name = "rpgm-enc"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "image",
+ "lz-string",
+ "serde",
+ "serde_json",
+ "symphonia",
+ "symphonia-bundle-mp3",
+ "symphonia-codec-vorbis",
+ "symphonia-core",
+ "symphonia-format-ogg",
+ "thiserror 2.0.11",
+]
+
+[[package]]
+name = "rpgm-viewer"
 version = "0.1.0"
 dependencies = [
  "cpal",
@@ -3102,17 +3119,6 @@ dependencies = [
  "walkdir",
  "wasm-bindgen-futures",
  "web-sys",
-]
-
-[[package]]
-name = "rpgm-enc"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "lz-string",
- "serde",
- "serde_json",
- "thiserror 2.0.11",
 ]
 
 [[package]]
@@ -3402,6 +3408,18 @@ dependencies = [
  "symphonia-core",
  "symphonia-metadata",
  "symphonia-utils-xiph",
+]
+
+[[package]]
+name = "symphonia-bundle-mp3"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c01c2aae70f0f1fb096b6f0ff112a930b1fb3626178fba3ae68b09dce71706d4"
+dependencies = [
+ "lazy_static",
+ "log",
+ "symphonia-core",
+ "symphonia-metadata",
 ]
 
 [[package]]

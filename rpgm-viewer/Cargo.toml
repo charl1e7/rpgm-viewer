@@ -1,5 +1,5 @@
 [package]
-name = "rpg_viewer"
+name = "rpgm-viewer"
 version = "0.1.0"
 authors = ["Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"]
 edition = "2021"
@@ -14,22 +14,21 @@ egui = "0.31"
 eframe = { version = "0.31", default-features = false, features = [
     # "accesskit",     # Make egui compatible with screen readers. NOTE: adds a lot of dependencies.
     "default_fonts", # Embed the default egui fonts.
-    "glow",          # Use the glow rendering backend. Alternative: "wgpu".
+    "wgpu",          # Use the glow rendering backend. Alternative: "wgpu".
     "persistence",   # Enable restoring app state when restarting the app.
-    "wayland",       # To support Linux (and CI)
+    "wayland",       # To support Linux (and CI),
+    "x11",
 ] }
 log = "0.4"
 
 # You only need serde if you want app persistence:
 serde = { version = "1", features = ["derive"] }
 image = "0.25"
-rfd = "0.15"
-notify = "8.0"
+rfd = "0.14"
 walkdir = "2.5"
-rpgm-enc = { path="../rpgm-enc" }
-cpal = "0.15.3"
-rodio = "0.20.1"
-symphonia = { version = "0.5.4", features = ["aac", "isomp4"] }
+rpgm-enc = { path = "../rpgm-enc" }
+cpal = "0.15"
+symphonia = { version = "0.5", features = ["aac", "isomp4"] }
 egui_logger = "0.6.3"
 
 # native:
@@ -39,17 +38,7 @@ env_logger = "0.11"
 # web:
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen-futures = "0.4"
-web-sys = "0.3"           # to access the DOM (to hide the loading text)
-
-[profile.release]
-opt-level = 2 # fast and small wasm
-
-# Optimize all dependencies even in debug builds:
-[profile.dev.package."*"]
-opt-level = 2
-
-
-[patch.crates-io]
+web-sys = "0.3"              # to access the DOM (to hide the loading text)
 
 # If you want to use the bleeding edge version of egui and eframe:
 # egui = { git = "https://github.com/emilk/egui", branch = "master" }

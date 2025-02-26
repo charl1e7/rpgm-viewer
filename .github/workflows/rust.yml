@@ -152,25 +152,28 @@ jobs:
         cargo install cross
 
     - name: Build
-      working-directory: ./rpgm-viewer
+      env:
+        CROSS_NO_WARNINGS: 0
       run: |
         cross build --verbose --release --target=${{ matrix.TARGET }}
 
     - name: Rename
-      run: cp ./rpgm-viewer/target/${{ matrix.TARGET }}/release/rpg_viewer${{ matrix.EXTENSION }} rpg_viewer-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
+      run: |
+        ls -R
+        cp target/${{ matrix.TARGET }}/release/rpgm-viewer${{ matrix.EXTENSION }} rpgm-viewer-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
 
     - uses: actions/upload-artifact@master
       with:
-        name: rpg_viewer-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
-        path: rpg_viewer-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
+        name: rpgm-viewer-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
+        path: rpgm-viewer-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
 
     - uses: svenstaro/upload-release-action@v2
       name: Upload binaries to release
       if: ${{ github.event_name == 'push' }}
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: rpg_viewer-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
-        asset_name: rpg_viewer-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
+        file: rpgm-viewer-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
+        asset_name: rpgm-viewer-${{ matrix.TARGET }}${{ matrix.EXTENSION }}
         tag: ${{ github.ref_name }}
         release_name: Release ${{ github.ref_name }}
         overwrite: true

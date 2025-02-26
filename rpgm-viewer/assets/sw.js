@@ -2,8 +2,8 @@ var cacheName = 'rpgm-viewer-pwa';
 var filesToCache = [
   './',
   './index.html',
-  './rpg_viewer.js',
-  './rpg_viewer_bg.wasm',
+  './rpgm_viewer.js',
+  './rpgm_viewer_bg.wasm',
 ];
 
 /* Start the service worker and cache all of the app's content */
