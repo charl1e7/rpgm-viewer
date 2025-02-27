@@ -1,6 +1,5 @@
 use super::file_entry::FileEntry;
 use super::FileBrowser;
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::components::audio::AudioState;
@@ -30,14 +29,13 @@ impl FileBrowser {
             self.last_thumbnail_compression_size = current_thumbnail_size;
         }
 
-        self.update_thumbnail_cache_settings(ui_settings);
-
         ui.heading("Files");
         self.show_search_bar(ui);
         ui.separator();
 
         if let Some(root) = &crypt_manager.current_folder {
             let root = root.clone();
+            self.check_and_update_cache(&root, ui_settings);
             self.update_entries_cache(&root, crypt_manager, ui_settings);
             let entries = self.get_filtered_entries(&root);
             self.show_file_list(ui, ctx, entries, crypt_manager, ui_settings, audio);
@@ -115,7 +113,7 @@ impl FileBrowser {
             if let Some(texture) = self.thumbnail_cache.get(&entry.path) {
                 entry.thumbnail = Some(texture);
             } else {
-                debug!("No thumbnail in cache to preserve for: {:?}", entry.path);
+                trace!("No thumbnail in cache to preserve for: {:?}", entry.path);
             }
         }
     }

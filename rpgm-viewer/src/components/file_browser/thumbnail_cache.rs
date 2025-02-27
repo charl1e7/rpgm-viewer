@@ -2,10 +2,12 @@ use log::{debug, error, info, trace};
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
-    sync::{mpsc, Arc, Mutex},
+    sync::{mpsc, Arc},
     thread,
-    time::{Duration, Instant},
+    time::SystemTime,
 };
+
+use super::file_entry::FileEntry;
 
 pub struct ThumbnailTask {
     pub path: PathBuf,
@@ -25,22 +27,16 @@ struct ThreadChannels {
 
 #[derive(Default)]
 pub struct ThumbnailCache {
-    cache: HashMap<PathBuf, (egui::TextureHandle, Instant)>,
-    max_size: usize,
-    ttl: Duration,
+    cache: HashMap<PathBuf, (egui::TextureHandle, SystemTime)>,
     pending_loads: HashSet<PathBuf>,
     failed_loads: HashSet<PathBuf>,
-    counter: usize,
     channels: Option<Arc<ThreadChannels>>,
     worker_running: bool,
 }
 
 impl ThumbnailCache {
-    pub fn new(max_size: usize, ttl: Duration) -> Self {
-        info!(
-            "Creating new ThumbnailCache: max_size={}, ttl={:?}",
-            max_size, ttl
-        );
+    pub fn new() -> Self {
+        info!("Creating new ThumbnailCache");
 
         let (task_tx, task_rx) = mpsc::channel();
         let (result_tx, result_rx) = mpsc::channel();
@@ -53,12 +49,9 @@ impl ThumbnailCache {
         });
 
         Self {
-            cache: HashMap::with_capacity(max_size),
-            max_size,
-            ttl,
+            cache: HashMap::new(),
             pending_loads: HashSet::new(),
             failed_loads: HashSet::new(),
-            counter: 0,
             channels: Some(channels),
             worker_running: true,
         }
@@ -71,17 +64,9 @@ impl ThumbnailCache {
         info!("Starting background thread for thumbnail processing");
         thread::spawn(move || {
             debug!("Background thread started");
-            let thread_id = thread::current().id();
-            info!("Thumbnail thread started: {:?}", thread_id);
-
             while let Ok(task) = task_rx.recv() {
                 debug!("Received thumbnail processing task: {:?}", task.path);
                 let result = Self::process_thumbnail_task(task);
-                debug!(
-                    "Thumbnail processing completed: {:?}, success: {}",
-                    result.path,
-                    result.texture_data.is_some()
-                );
                 if result_tx.send(result).is_err() {
                     error!("Failed to send thumbnail processing result!");
                     break;
@@ -140,7 +125,6 @@ impl ThumbnailCache {
                     }
                     Err(e) => {
                         error!("Error loading image: {:?}, error: {:?}", path, e);
-                        error!("File will be added to the problematic list and will not be requested again");
                         None
                     }
                 }
@@ -166,12 +150,10 @@ impl ThumbnailCache {
 
             Self::start_worker_thread(task_rx, result_tx.clone());
 
-            let channels = Arc::new(ThreadChannels {
+            self.channels = Some(Arc::new(ThreadChannels {
                 sender: task_tx,
                 receiver: result_rx,
-            });
-
-            self.channels = Some(channels);
+            }));
             self.worker_running = true;
         }
     }
@@ -182,42 +164,28 @@ impl ThumbnailCache {
         decrypter: &rpgm_enc::Decrypter,
         compression_size: u32,
     ) {
-        if self.is_pending(path) {
-            trace!("Thumbnail loading already pending: {:?}", path);
-            return;
-        }
-
-        if self.failed_loads.contains(path) {
-            trace!("Skipping previously failed thumbnail load: {:?}", path);
+        if self.is_pending(path) || self.failed_loads.contains(path) {
             return;
         }
 
         self.ensure_initialized();
 
-        match &self.channels {
-            Some(channels) => {
-                debug!("Request to load thumbnail: {:?}", path);
-                let sender = channels.sender.clone();
-                self.mark_pending(path.to_path_buf());
+        if let Some(channels) = &self.channels {
+            debug!("Request to load thumbnail: {:?}", path);
+            let sender = channels.sender.clone();
+            self.mark_pending(path.to_path_buf());
 
-                let decrypter_arc = Arc::new(decrypter.clone());
+            let decrypter_arc = Arc::new(decrypter.clone());
 
-                let task = ThumbnailTask {
-                    path: path.to_path_buf(),
-                    decrypter: decrypter_arc,
-                    compression_size,
-                };
+            let task = ThumbnailTask {
+                path: path.to_path_buf(),
+                decrypter: decrypter_arc,
+                compression_size,
+            };
 
-                if sender.send(task).is_err() {
-                    error!("Error sending task to background thread: {:?}", path);
-                    self.unmark_pending(path);
-                } else {
-                    debug!("Task successfully sent to background thread: {:?}", path);
-                }
-            }
-            None => {
-                error!("Sender for background thread not available!");
-                self.ensure_initialized();
+            if sender.send(task).is_err() {
+                error!("Error sending task to background thread: {:?}", path);
+                self.unmark_pending(path);
             }
         }
     }
@@ -227,30 +195,26 @@ impl ThumbnailCache {
 
         self.ensure_initialized();
 
+        let channels = self
+            .channels
+            .clone()
+            .expect("Channels should be initialized");
+        let receiver = &channels.receiver;
+
         let mut results = Vec::new();
-        match &self.channels {
-            Some(channels) => {
-                while let Ok(result) = channels.receiver.try_recv() {
-                    debug!("Received thumbnail loading result: {:?}", result.path);
-                    results.push(result);
-                }
-            }
-            None => {
-                error!("Receiver for background thread not available!");
-                self.ensure_initialized();
-                return loaded_thumbnails;
-            }
+        while let Ok(result) = receiver.try_recv() {
+            debug!("Received thumbnail loading result: {:?}", result.path);
+            results.push(result);
         }
 
         for result in results {
-            let path = result.path.clone();
-
             if let Some(texture_data) = result.texture_data {
-                debug!("Loading texture for: {:?}", path);
                 let (raw_data, dimensions) = texture_data;
-
                 let texture = ctx.load_texture(
-                    format!("thumb_{}", path.file_name().unwrap().to_string_lossy()),
+                    format!(
+                        "thumb_{}",
+                        result.path.file_name().unwrap().to_string_lossy()
+                    ),
                     egui::ColorImage::from_rgb([dimensions[0], dimensions[1]], &raw_data),
                     egui::TextureOptions {
                         magnification: egui::TextureFilter::Linear,
@@ -258,53 +222,69 @@ impl ThumbnailCache {
                         ..Default::default()
                     },
                 );
-
-                debug!("Texture created: {:?}", path);
-                self.insert(path.clone(), texture.clone());
-                loaded_thumbnails.push((path.clone(), texture));
+                let modified_time = std::fs::metadata(&result.path)
+                    .and_then(|m| m.modified())
+                    .unwrap_or(SystemTime::now());
+                self.insert(result.path.clone(), texture.clone(), modified_time);
+                loaded_thumbnails.push((result.path.clone(), texture));
             } else {
-                debug!("Failed to get thumbnail data for: {:?}", path);
-                self.failed_loads.insert(path.clone());
-                info!("File marked as problematic and will be skipped: {:?}", path);
+                self.failed_loads.insert(result.path.clone());
             }
-
-            self.unmark_pending(&path);
-        }
-
-        if !loaded_thumbnails.is_empty() {
-            info!("Loaded {} thumbnails", loaded_thumbnails.len());
+            self.unmark_pending(&result.path);
         }
 
         loaded_thumbnails
     }
 
     pub fn get(&mut self, path: &Path) -> Option<egui::TextureHandle> {
-        self.counter += 1;
-        if self.counter % 100 == 0 {
-            self.cleanup_expired();
-        }
-
-        if let Some((texture, timestamp)) = self.cache.get(path) {
-            if timestamp.elapsed() < self.ttl {
-                trace!("Retrieved thumbnail from cache: {:?}", path);
-                return Some(texture.clone());
+        if let Some((texture, modified_time)) = self.cache.get(path) {
+            if let Ok(current_modified) = std::fs::metadata(path).and_then(|m| m.modified()) {
+                if *modified_time == current_modified {
+                    return Some(texture.clone());
+                } else {
+                    self.cache.remove(path);
+                }
+            } else {
+                self.cache.remove(path);
             }
-            trace!("Thumbnail expired: {:?}", path);
-            self.cache.remove(path);
         }
         None
     }
 
-    fn cleanup_expired(&mut self) {
-        let before_count = self.cache.len();
-        self.cache
-            .retain(|_, (_, timestamp)| timestamp.elapsed() < self.ttl);
-        let after_count = self.cache.len();
-        if before_count != after_count {
-            debug!(
-                "Cleaning expired thumbnails: removed {}",
-                before_count - after_count
+    pub fn update_cache(&mut self, root: &Path) {
+        let mut to_remove = Vec::new();
+        for (path, (_, modified_time)) in self.cache.iter() {
+            match std::fs::metadata(path) {
+                Ok(metadata) => {
+                    if let Ok(current_modified) = metadata.modified() {
+                        if *modified_time != current_modified {
+                            to_remove.push(path.clone());
+                        }
+                    }
+                }
+                Err(_) => {
+                    to_remove.push(path.clone());
+                }
+            }
+        }
+
+        for path in to_remove {
+            self.cache.remove(&path);
+            info!(
+                "Removed outdated or deleted thumbnail from cache: {:?}",
+                path
             );
+        }
+
+        let entries = FileEntry::recursive_collect_all_entries_flat(root, 0);
+        for entry in entries {
+            if !entry.is_folder
+                && self.get(&entry.path).is_none()
+                && !self.is_pending(&entry.path)
+                && !self.is_failed(&entry.path)
+            {
+                debug!("Thumbnail missing for: {:?}", entry.path);
+            }
         }
     }
 
@@ -330,23 +310,14 @@ impl ThumbnailCache {
         self.pending_loads.remove(path);
     }
 
-    pub fn insert(&mut self, path: PathBuf, texture: egui::TextureHandle) {
-        while self.cache.len() >= self.max_size {
-            if let Some((oldest_key, _)) = self
-                .cache
-                .iter()
-                .min_by_key(|(_, (_, timestamp))| timestamp.elapsed())
-            {
-                let oldest_key = oldest_key.clone();
-                self.cache.remove(&oldest_key);
-                trace!("Removed old thumbnail from cache: {:?}", oldest_key);
-            } else {
-                break;
-            }
-        }
-
-        trace!("Added thumbnail to cache: {:?}", path);
-        self.cache.insert(path, (texture, Instant::now()));
+    pub fn insert(
+        &mut self,
+        path: PathBuf,
+        texture: egui::TextureHandle,
+        modified_time: SystemTime,
+    ) {
+        debug!("Added thumbnail to cache: {:?}", path);
+        self.cache.insert(path, (texture, modified_time));
     }
 
     pub fn remove(&mut self, path: &Path) {
@@ -354,18 +325,6 @@ impl ThumbnailCache {
         self.cache.remove(path);
         self.pending_loads.remove(path);
         self.failed_loads.remove(path);
-    }
-
-    pub fn set_max_size(&mut self, max_size: usize) {
-        debug!("Changing maximum cache size: {}", max_size);
-        self.max_size = max_size;
-        self.cleanup_oversized();
-    }
-
-    pub fn set_ttl(&mut self, ttl: Duration) {
-        debug!("Changing thumbnail lifetime: {:?}", ttl);
-        self.ttl = ttl;
-        self.cleanup_expired();
     }
 
     pub fn clear_cache(&mut self) {
@@ -384,29 +343,5 @@ impl ThumbnailCache {
             "Thumbnail cache cleared: removed {} images and {} problematic files",
             cache_size, failed_size
         );
-    }
-
-    fn cleanup_oversized(&mut self) {
-        let before_count = self.cache.len();
-        while self.cache.len() > self.max_size {
-            if let Some((oldest_key, _)) = self
-                .cache
-                .iter()
-                .min_by_key(|(_, (_, timestamp))| timestamp.elapsed())
-            {
-                let oldest_key = oldest_key.clone();
-                self.cache.remove(&oldest_key);
-                trace!("Removed thumbnail due to cache overflow: {:?}", oldest_key);
-            } else {
-                break;
-            }
-        }
-        let after_count = self.cache.len();
-        if before_count != after_count {
-            debug!(
-                "Cleaning excess thumbnails: removed {}",
-                before_count - after_count
-            );
-        }
     }
 }

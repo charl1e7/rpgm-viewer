@@ -17,18 +17,13 @@ impl UiSettingsWindow {
 
                     ui.collapsing("Thumbnail Cache Settings", |ui| {
                         ui.add(
-                            egui::Slider::new(&mut settings.thumbnail_cache_size, 10..=1000)
-                                .text("Max Thumbnails in Cache"),
-                        );
-
-                        ui.add(
-                            egui::Slider::new(&mut settings.thumbnail_cache_ttl_seconds, 30..=3600)
-                                .text("Cache Time (sec)"),
-                        );
-
-                        ui.add(
                             egui::Slider::new(&mut settings.thumbnail_compression_size, 32..=1024)
                                 .text("Thumbnail Resolution"),
+                        );
+
+                        ui.add(
+                            egui::Slider::new(&mut settings.cache_update, 10..=300)
+                                .text("Cache Update Interval (sec)"),
                         );
 
                         if ui.button("Clear Thumbnail Cache").clicked() {

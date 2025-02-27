@@ -2,7 +2,7 @@ pub mod file_entry;
 pub mod thumbnail_cache;
 pub mod ui;
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use crate::components::ui_settings::UiSettings;
 use file_entry::FileEntry;
@@ -23,13 +23,11 @@ pub struct FileBrowser {
     #[serde(skip)]
     last_expanded_state: Vec<PathBuf>,
     #[serde(skip)]
-    last_update_time: Option<std::time::SystemTime>,
+    last_update_time: Option<SystemTime>,
+    #[serde(skip)]
+    last_cache_check: Option<SystemTime>,
     #[serde(skip)]
     all_thumbnails_loaded: bool,
-    #[serde(skip)]
-    last_thumbnail_max_size: usize,
-    #[serde(skip)]
-    last_thumbnail_ttl_secs: u64,
     #[serde(skip)]
     last_show_thumbnails: bool,
     #[serde(skip)]
@@ -48,15 +46,11 @@ impl Default for FileBrowser {
             entries_cache: None,
             last_update_time: None,
             last_expanded_state: Vec::new(),
-            thumbnail_cache: ThumbnailCache::new(
-                ui_settings.get_thumbnail_cache_size(),
-                ui_settings.get_thumbnail_cache_ttl(),
-            ),
+            thumbnail_cache: ThumbnailCache::new(),
             all_thumbnails_loaded: false,
-            last_thumbnail_max_size: ui_settings.get_thumbnail_cache_size(),
-            last_thumbnail_ttl_secs: ui_settings.get_thumbnail_cache_ttl().as_secs(),
             last_show_thumbnails: ui_settings.show_thumbnails,
             last_thumbnail_compression_size: ui_settings.get_thumbnail_compression_size(),
+            last_cache_check: None,
             show_delete_confirmation: None,
         }
     }
@@ -69,20 +63,22 @@ impl FileBrowser {
         self.all_thumbnails_loaded = false;
     }
 
-    pub fn update_thumbnail_cache_settings(&mut self, ui_settings: &UiSettings) {
-        let current_max_size = ui_settings.get_thumbnail_cache_size();
-        let current_ttl = ui_settings.get_thumbnail_cache_ttl();
-        let current_ttl_secs = current_ttl.as_secs();
+    pub fn check_and_update_cache(&mut self, root: &PathBuf, ui_settings: &UiSettings) {
+        let now = SystemTime::now();
+        let cache_update_interval = ui_settings.get_cache_update_interval();
 
-        if self.last_thumbnail_max_size != current_max_size {
-            self.thumbnail_cache.set_max_size(current_max_size);
-            self.last_thumbnail_max_size = current_max_size;
+        if let Some(last_check) = self.last_cache_check {
+            if now
+                .duration_since(last_check)
+                .unwrap_or(Duration::from_secs(0))
+                < cache_update_interval
+            {
+                return;
+            }
         }
 
-        if self.last_thumbnail_ttl_secs != current_ttl_secs {
-            self.thumbnail_cache.set_ttl(current_ttl);
-            self.last_thumbnail_ttl_secs = current_ttl_secs;
-        }
+        self.thumbnail_cache.update_cache(root);
+        self.last_cache_check = Some(now);
     }
 
     pub fn get_thumbnail_compression_size(&self, ui_settings: &UiSettings) -> u32 {
