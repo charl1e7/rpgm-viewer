@@ -34,11 +34,11 @@ Visit the [Releases page](https://github.com/charl1e7/rpgm-viewer/releases) to d
 #### Supported Versions
 
 - **Windows**:
-  - File: `rpgm_viewer-x86_64-pc-windows-msvc.exe `
+  - File: `rpgm-viewer-x86_64-pc-windows-msvc.exe `
 - **Linux**:
-  - File: `rpgm_viewer-unknown-linux-gnu`
+  - File: `rpgm-viewer-unknown-linux-gnu`
 - **macOS**:
-  - File: `rpgm_viewer-aarch64-apple-darwin`.
+  - File: `rpgm-viewer-aarch64-apple-darwin`.
 
 ### Option 2: Build from Source
 
@@ -50,7 +50,7 @@ If you prefer to compile the app yourself or need to customize it, follow these 
 
    ```bash
    git clone https://github.com/charl1e7/rpgm-viewer.git
-   cd rpgm-viewer/rpgm-viewer
+   cd rpgm-viewer
    ```
 2. **Build and Run Natively**:
 
@@ -59,8 +59,8 @@ If you prefer to compile the app yourself or need to customize it, follow these 
      cargo build --release
      ```
    - Run the app:
-     - Windows: `target\release\rpgm_viewer.exe`
-     - Linux/macOS: `./target/release/rpgm_viewer`
+     - Windows: `.\target\release\rpgm-viewer.exe`
+     - Linux/macOS: `./target/release/rpgm-viewer`
 
 ---
 
