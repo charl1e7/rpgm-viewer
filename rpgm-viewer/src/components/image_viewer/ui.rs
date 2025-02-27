@@ -45,7 +45,10 @@ impl ImageViewer {
                     ui.add_space(10.0);
                     if ui.button("🖼 Open Image...").clicked() {
                         if let Some(path) = rfd::FileDialog::new()
-                            .add_filter("Images", &["png", "jpg", "jpeg", "gif", "bmp", "webp"])
+                            .add_filter(
+                                "Images",
+                                &["png", "jpg", "jpeg", "gif", "bmp", "webp", "png_", "rpgmvp"],
+                            )
                             .pick_file()
                         {
                             if let Some(decrypter) = crypt_manager.get_decrypter() {
