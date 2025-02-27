@@ -7,13 +7,23 @@
         "**/.DS_Store": true,
         "**/Thumbs.db": true,
         ".vscode": true,
-        "target": true
+        "target": true,
+        "rpgm-viewer/dist": true,
+        "rpgm-viewer/Cargo.lock": true,
+        "rpgm-viewer/.vscode": true,
+        "rpgm-enc/.vscode": true,
+        "rpgm-enc/Cargo.lock": true
     },
     "hide-files.files": [
         ".vscode",
-        "target"
+        "target",
+        "rpgm-viewer/dist",
+        "rpgm-viewer/Cargo.lock",
+        "rpgm-viewer/.vscode",
+        "rpgm-enc/.vscode",
+        "rpgm-enc/Cargo.lock"
     ],
-	"[rust]": {
+    "[rust]": {
         "editor.defaultFormatter": "rust-lang.rust-analyzer",
         "editor.formatOnSave": true
     }

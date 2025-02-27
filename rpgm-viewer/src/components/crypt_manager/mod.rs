@@ -162,7 +162,7 @@ impl CryptManager {
         }
     }
 
-    pub fn handle_key_hex_input(&mut self, _root: &Path, hex_str: String) {
+    pub fn handle_key_hex_input(&mut self, hex_str: String) {
         let hex_str = hex_str.replace(" ", "");
         let key_bytes = (0..hex_str.len())
             .step_by(2)
