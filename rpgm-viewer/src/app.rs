@@ -1,3 +1,5 @@
+use log::{debug, info, trace};
+
 use crate::components::audio::AudioState;
 use crate::components::crypt_manager::CryptManager;
 use crate::components::crypt_settings::ui::CryptSettingsWindow;
@@ -39,6 +41,11 @@ impl eframe::App for ImageViewerApp {
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.ui_settings.apply(ctx);
+
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.file_browser.current_image = None;
+            debug!("Esc pressed, current_image reset to None");
+        }
 
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
