@@ -60,7 +60,6 @@ impl FileBrowser {
                 if ui.button("✖").clicked() {
                     self.search_query.clear();
                     self.search_results_cache = None;
-                    self.entries_cache = None;
                     self.all_thumbnails_loaded = false;
                     return true;
                 }
@@ -104,7 +103,7 @@ impl FileBrowser {
         }
     }
 
-    fn preserve_thumbnails(&self, new_entries: &mut Vec<FileEntry>, ui_settings: &UiSettings) {
+    fn preserve_thumbnails(&mut self, new_entries: &mut Vec<FileEntry>, ui_settings: &UiSettings) {
         if !ui_settings.show_thumbnails {
             for entry in new_entries.iter_mut() {
                 entry.thumbnail = None;
@@ -112,21 +111,11 @@ impl FileBrowser {
             return;
         }
 
-        if let Some(old_entries) = self.entries_cache.as_ref() {
-            let old_thumbnails: HashMap<_, _> = old_entries
-                .iter()
-                .filter_map(|entry| {
-                    entry
-                        .thumbnail
-                        .as_ref()
-                        .map(|thumb| (entry.path.clone(), thumb.clone()))
-                })
-                .collect();
-
-            for entry in new_entries.iter_mut() {
-                if let Some(thumb) = old_thumbnails.get(&entry.path) {
-                    entry.thumbnail = Some(thumb.clone());
-                }
+        for entry in new_entries.iter_mut() {
+            if let Some(texture) = self.thumbnail_cache.get(&entry.path) {
+                entry.thumbnail = Some(texture);
+            } else {
+                debug!("No thumbnail in cache to preserve for: {:?}", entry.path);
             }
         }
     }
@@ -148,10 +137,12 @@ impl FileBrowser {
             let all_entries = FileEntry::recursive_collect_all_entries_flat(root, 0);
             let query = self.search_query.to_lowercase();
 
-            let filtered_entries: Vec<_> = all_entries
+            let mut filtered_entries: Vec<_> = all_entries
                 .into_iter()
                 .filter(|entry| self.entry_matches_search(entry, root, &query))
                 .collect();
+
+            self.preserve_thumbnails(&mut filtered_entries, &UiSettings::default());
 
             debug!("Found {} matches for '{}'", filtered_entries.len(), query);
             self.search_results_cache = Some((self.search_query.clone(), filtered_entries));
@@ -227,41 +218,18 @@ impl FileBrowser {
             return;
         }
 
-        if self.all_thumbnails_loaded {
+        if self.all_thumbnails_loaded && !self.thumbnail_cache.has_pending_loads() {
+            trace!("All thumbnails loaded, skipping processing");
             return;
-        }
-
-        let image_entries_without_thumbnails: Vec<_> = entries
-            .iter()
-            .filter(|e| {
-                !e.is_folder
-                    && e.thumbnail.is_none()
-                    && self.is_image_file(&e.path)
-                    && !self.thumbnail_cache.is_failed(&e.path)
-            })
-            .collect();
-
-        let no_thumb_count = image_entries_without_thumbnails.len();
-
-        if no_thumb_count == 0 && !self.thumbnail_cache.has_pending_loads() {
-            self.all_thumbnails_loaded = true;
-            trace!("All thumbnails loaded, skipping processing in subsequent frames");
-            return;
-        }
-
-        if no_thumb_count > 0 {
-            trace!("Files without thumbnails: {}", no_thumb_count);
         }
 
         let loaded_thumbnails = self.thumbnail_cache.process_results(ctx);
-
         if !loaded_thumbnails.is_empty() {
             debug!("Received {} new thumbnails", loaded_thumbnails.len());
             self.apply_loaded_thumbnails(entries, loaded_thumbnails);
         }
 
         self.request_visible_thumbnails(ui, entries, decrypter, ui_settings);
-
         self.update_caches(entries);
     }
 
@@ -299,6 +267,8 @@ impl FileBrowser {
             if entry.is_folder
                 || !self.is_image_file(&entry.path)
                 || entry.thumbnail.is_some()
+                || self.thumbnail_cache.is_pending(&entry.path)
+                || self.thumbnail_cache.get(&entry.path).is_some()
                 || self.thumbnail_cache.is_failed(&entry.path)
             {
                 continue;
