@@ -76,21 +76,23 @@ impl AudioState {
         }
     }
 
-    pub fn play_audio(&mut self, path: &Path, decrypter: &Decrypter) -> Result<(), String> {
+    pub fn play_audio(&mut self, path: &Path, decrypter: Option<&Decrypter>) -> Result<(), String> {
         self.stop_audio();
+        
+        let is_encrypted = path.extension().map_or(false, |ext| {
+            matches!(ext.to_str().unwrap_or(""), "ogg_" | "rpgmvo" | "m4a_" | "rpgmvm")
+        });
 
-        let data = if path.extension().map_or(false, |ext| {
-            matches!(
-                ext.to_str().unwrap_or(""),
-                "ogg_" | "rpgmvo" | "m4a_" | "rpgmvm"
-            )
-        }) {
+        let data = if is_encrypted {
             let file_data = std::fs::read(path)
                 .map_err(|e| format!("Failed to read encrypted audio file: {}", e))?;
-
-            decrypter
-                .decrypt(&file_data)
-                .map_err(|e| format!("Failed to decrypt audio: {}", e))?
+            
+            if let Some(dec) = decrypter {
+                dec.decrypt(&file_data)
+                    .map_err(|e| format!("Failed to decrypt audio: {}", e))?
+            } else {
+                return Err("No decryption key set. Cannot play encrypted audio.".to_string());
+            }
         } else {
             std::fs::read(path).map_err(|e| format!("Failed to read audio file: {}", e))?
         };

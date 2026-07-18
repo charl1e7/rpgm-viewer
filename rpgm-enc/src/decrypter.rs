@@ -88,14 +88,19 @@ impl Decrypter {
         if data.is_empty() {
             return Err(Error::EmptyFile);
         }
+        
+        let header_len = self.get_header_len();
+        if data.len() < header_len {
+            return Err(Error::InvalidHeader); 
+        }
 
         if !self.ignore_fake_header {
-            let header = &data[0..self.get_header_len()];
+            let header = &data[0..header_len];
             if !self.verify_fake_header(header) {
                 return Err(Error::InvalidHeader);
             }
         }
-
+        
         // Rem fake header
         let mut content = data[self.get_header_len()..].to_vec();
 
