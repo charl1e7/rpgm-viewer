@@ -52,7 +52,7 @@ impl ImageViewer {
                             .pick_file()
                         {
                             if let Some(decrypter) = crypt_manager.get_decrypter() {
-                                match Self::load_image(&path, ctx, Some(decrypter)) {
+                                match Self::load_image(&path, ctx, Some(decrypter.clone())) {
                                     Some(texture) => {
                                         file_browser.current_image =
                                             Some((path.to_path_buf(), texture));

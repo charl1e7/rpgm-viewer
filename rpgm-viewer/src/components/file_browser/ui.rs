@@ -475,25 +475,18 @@ impl FileBrowser {
         audio: &mut AudioState,
     ) {
         if self.is_audio_file(&entry.path) {
-            let is_encrypted = entry.path.extension().map_or(false, |ext| {
-                matches!(ext.to_str().unwrap_or(""), "ogg_" | "rpgmvo" | "m4a_" | "rpgmvm")
-            });
-
-            if is_encrypted {
-                if let Some(decrypter) = crypt_manager.get_decrypter() {
-                    if let Err(e) = audio.play_audio(&entry.path, Some(decrypter)) {
-                        error!("Failed to play audio file {:?}: {}", entry.path, e);
-                    }
-                } else {
-                    error!("Cannot play encrypted audio {:?}: No decryption key set", entry.path);
-                }
-            } else {
-                if let Err(e) = audio.play_audio(&entry.path, None) {
+            if let Some(decrypter) = crypt_manager.get_decrypter() {
+                if let Err(e) = audio.play_audio(&entry.path, decrypter) {
                     error!("Failed to play audio file {:?}: {}", entry.path, e);
                 }
+            } else {
+                error!(
+                    "Cannot play encrypted audio {:?}: No decryption key set",
+                    entry.path
+                );
             }
         } else {
-            let decrypter = crypt_manager.get_decrypter(); 
+            let decrypter = crypt_manager.get_decrypter().cloned();
             match ImageViewer::load_image(&entry.path, ctx, decrypter) {
                 Some(texture) => {
                     self.current_image = Some((entry.path.clone(), texture));

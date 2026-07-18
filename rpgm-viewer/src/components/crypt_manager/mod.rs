@@ -351,6 +351,11 @@ impl CryptManager {
         };
 
         std::fs::write(&output_path, rpg_file.content().unwrap()).map_err(|e| e.to_string())?;
+
+        if output_path != path {
+            let _ = std::fs::remove_file(path);
+        }
+
         info!(
             "Successfully wrote encrypted file to: {}",
             output_path.display()

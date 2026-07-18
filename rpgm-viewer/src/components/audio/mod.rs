@@ -1,9 +1,14 @@
+use cpal::{
+    traits::{DeviceTrait, HostTrait, StreamTrait},
+    Device, SampleFormat, StreamConfig,
+};
+use rpgm_enc::Decrypter;
 use std::{
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU32, AtomicUsize, Ordering},
     sync::{Arc, Mutex},
     time::Duration,
 };
-
 use symphonia::core::{
     audio::{SampleBuffer, Signal},
     codecs::{DecoderOptions, CODEC_TYPE_NULL},
@@ -12,13 +17,6 @@ use symphonia::core::{
     meta::MetadataOptions,
     probe::Hint,
 };
-
-use cpal::{
-    traits::{DeviceTrait, HostTrait, StreamTrait},
-    Device, SampleFormat, StreamConfig,
-};
-
-use rpgm_enc::Decrypter;
 
 pub mod ui;
 
@@ -52,16 +50,15 @@ pub struct AudioState {
     stream: Option<cpal::Stream>,
     device: Option<Device>,
     sample_rate: u32,
-    read_position: Arc<Mutex<usize>>,
-    total_samples: Arc<Mutex<usize>>,
-    volume: Arc<Mutex<f32>>,
+    read_position: Arc<AtomicUsize>,
+    total_samples: Arc<AtomicUsize>,
+    volume: Arc<AtomicU32>, 
 }
 
 impl AudioState {
     pub fn new() -> Self {
         let host = cpal::default_host();
         let device = host.default_output_device();
-
         Self {
             audio_buffer: Arc::new(Mutex::new(Vec::new())),
             current_audio: None,
@@ -70,36 +67,31 @@ impl AudioState {
             stream: None,
             device,
             sample_rate: 44100,
-            read_position: Arc::new(Mutex::new(0)),
-            total_samples: Arc::new(Mutex::new(0)),
-            volume: Arc::new(Mutex::new(1.0)),
+            read_position: Arc::new(AtomicUsize::new(0)),
+            total_samples: Arc::new(AtomicUsize::new(0)),
+            volume: Arc::new(AtomicU32::new(f32::to_bits(1.0))),
         }
     }
 
-    pub fn play_audio(&mut self, path: &Path, decrypter: Option<&Decrypter>) -> Result<(), String> {
+    pub fn play_audio(&mut self, path: &Path, decrypter: &Decrypter) -> Result<(), String> {
         self.stop_audio();
-        
-        let is_encrypted = path.extension().map_or(false, |ext| {
-            matches!(ext.to_str().unwrap_or(""), "ogg_" | "rpgmvo" | "m4a_" | "rpgmvm")
-        });
-
-        let data = if is_encrypted {
+        let data = if path.extension().map_or(false, |ext| {
+            matches!(
+                ext.to_str().unwrap_or(""),
+                "ogg_" | "rpgmvo" | "m4a_" | "rpgmvm"
+            )
+        }) {
             let file_data = std::fs::read(path)
                 .map_err(|e| format!("Failed to read encrypted audio file: {}", e))?;
-            
-            if let Some(dec) = decrypter {
-                dec.decrypt(&file_data)
-                    .map_err(|e| format!("Failed to decrypt audio: {}", e))?
-            } else {
-                return Err("No decryption key set. Cannot play encrypted audio.".to_string());
-            }
+            decrypter
+                .decrypt(&file_data)
+                .map_err(|e| format!("Failed to decrypt audio: {}", e))?
         } else {
             std::fs::read(path).map_err(|e| format!("Failed to read audio file: {}", e))?
         };
 
         let cursor = std::io::Cursor::new(data);
         let mss = MediaSourceStream::new(Box::new(cursor), Default::default());
-
         let mut hint = Hint::new();
         if let Some(ext) = path.extension() {
             hint.with_extension(ext.to_str().unwrap_or(""));
@@ -110,13 +102,11 @@ impl AudioState {
 
         let meta_opts = MetadataOptions::default();
         let fmt_opts = FormatOptions::default();
-
         let probed = symphonia::default::get_probe()
             .format(&hint, mss, &fmt_opts, &meta_opts)
             .map_err(|e| format!("Error probing media: {}", e))?;
 
         let mut format = probed.format;
-
         let mut metadata = TrackMetadata::default();
         metadata.filename = path
             .file_name()
@@ -144,7 +134,6 @@ impl AudioState {
         let track = format
             .default_track()
             .ok_or("No default track found in the audio file")?;
-
         let mut decoder = symphonia::default::get_codecs()
             .make(&track.codec_params, &DecoderOptions::default())
             .map_err(|e| format!("Error creating decoder: {}", e))?;
@@ -184,26 +173,21 @@ impl AudioState {
             };
 
             let spec = *decoded.spec();
-
             let mut sample_buffer = SampleBuffer::<f32>::new(decoded.capacity() as u64, spec);
-
             sample_buffer.copy_interleaved_ref(decoded);
-
             let samples = sample_buffer.samples();
-
             audio_buffer.extend_from_slice(samples);
         }
 
         *self.audio_buffer.lock().unwrap() = audio_buffer;
-        *self.total_samples.lock().unwrap() = self.audio_buffer.lock().unwrap().len();
-        *self.read_position.lock().unwrap() = 0;
+        self.total_samples
+            .store(self.audio_buffer.lock().unwrap().len(), Ordering::Relaxed);
+        self.read_position.store(0, Ordering::Relaxed);
         *self.current_metadata.lock().unwrap() = metadata;
 
         self.start_playback()?;
-
         self.current_audio = Some(path.to_path_buf());
         self.is_playing = true;
-
         Ok(())
     }
 
@@ -211,16 +195,13 @@ impl AudioState {
         if self.device.is_none() {
             self.device = cpal::default_host().default_output_device();
         }
-
         let device = self.device.as_ref().ok_or("No audio device available")?;
-
         let supported_config = device
             .supported_output_configs()
             .map_err(|e| format!("Error getting supported configs: {}", e))?
             .find(|config| config.sample_format() == SampleFormat::F32)
             .ok_or("No supported audio format found")?
             .with_max_sample_rate();
-
         let config: StreamConfig = supported_config.into();
 
         let audio_buffer = self.audio_buffer.clone();
@@ -232,19 +213,21 @@ impl AudioState {
             .build_output_stream(
                 &config,
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                    let mut pos = read_position.lock().unwrap();
-                    let total = *total_samples.lock().unwrap();
+                    let mut pos = read_position.load(Ordering::Relaxed);
+                    let total = total_samples.load(Ordering::Relaxed);
                     let buffer = audio_buffer.lock().unwrap();
-                    let current_volume = *volume.lock().unwrap();
+                    let current_volume = f32::from_bits(volume.load(Ordering::Relaxed));
 
                     for sample in data.iter_mut() {
-                        if *pos < total {
-                            *sample = buffer[*pos] * current_volume;
-                            *pos += 1;
+                        if pos < total {
+                            *sample = buffer[pos] * current_volume;
+                            pos += 1;
                         } else {
                             *sample = 0.0;
                         }
                     }
+                    
+                    read_position.store(pos, Ordering::Relaxed);
                 },
                 |err| log::error!("Error in audio stream: {}", err),
                 None,
@@ -255,13 +238,12 @@ impl AudioState {
             .play()
             .map_err(|e| format!("Error playing audio: {}", e))?;
         self.stream = Some(stream);
-
         Ok(())
     }
 
     pub fn stop_audio(&mut self) {
         self.stream = None;
-        *self.read_position.lock().unwrap() = 0;
+        self.read_position.store(0, Ordering::Relaxed);
         self.is_playing = false;
         self.current_audio = None;
     }
@@ -281,32 +263,27 @@ impl AudioState {
     }
 
     pub fn seek_to_percent(&mut self, percent: f32) {
-        let total = *self.total_samples.lock().unwrap();
+        let total = self.total_samples.load(Ordering::Relaxed);
         let new_pos = (total as f32 * percent.clamp(0.0, 1.0)) as usize;
-        *self.read_position.lock().unwrap() = new_pos;
+        self.read_position.store(new_pos, Ordering::Relaxed);
     }
 
     pub fn get_current_position(&self) -> f32 {
-        let pos = *self.read_position.lock().unwrap();
-        let total = *self.total_samples.lock().unwrap();
-
+        let pos = self.read_position.load(Ordering::Relaxed);
+        let total = self.total_samples.load(Ordering::Relaxed);
         if total == 0 {
             return 0.0;
         }
-
         pos as f32 / total as f32
     }
 
     pub fn get_current_time(&self) -> Duration {
         let metadata = self.current_metadata.lock().unwrap();
-
-        if self.sample_rate == 0 || *self.total_samples.lock().unwrap() == 0 {
+        if self.sample_rate == 0 || self.total_samples.load(Ordering::Relaxed) == 0 {
             return Duration::from_secs(0);
         }
-
         let total_duration = metadata.duration;
         let progress = self.get_current_position();
-
         Duration::from_secs_f64(total_duration.as_secs_f64() * progress as f64)
     }
 
@@ -315,11 +292,12 @@ impl AudioState {
     }
 
     pub fn set_volume(&mut self, volume: f32) {
-        *self.volume.lock().unwrap() = volume.clamp(0.0, 1.0);
+        self.volume
+            .store(f32::to_bits(volume.clamp(0.0, 1.0)), Ordering::Relaxed);
     }
 
     pub fn get_volume(&self) -> f32 {
-        *self.volume.lock().unwrap()
+        f32::from_bits(self.volume.load(Ordering::Relaxed))
     }
 
     pub fn is_playing(&self) -> bool {

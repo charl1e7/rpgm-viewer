@@ -11,23 +11,15 @@ impl ImageViewer {
     pub fn load_image(
         path: &std::path::Path,
         ctx: &egui::Context,
-        decrypter: Option<&Decrypter>,
+        decrypter: Option<Decrypter>, 
     ) -> Option<egui::TextureHandle> {
-        trace!("Loading image from path: {:?}", path);
         let file_data = std::fs::read(path).ok()?;
-        trace!("Original file size: {}", file_data.len());
+
         let decrypter = match decrypter {
-            Some(decrypter) => decrypter,
+            Some(d) => d,
             None => {
-                trace!("No decrypter provided, using default");
-                let key = Decrypter::detect_key_from_file(&file_data);
-                if let Some(key) = key {
-                    trace!("Detected key: {}", key.as_str());
-                    &Decrypter::new(Some(key))
-                } else {
-                    trace!("No key detected, returning None");
-                    return None;
-                }
+                let key = Decrypter::detect_key_from_file(&file_data)?;
+                Decrypter::new(Some(key))
             }
         };
         let mut rpg_file = rpgm_enc::RPGFile::new(path.to_path_buf()).ok()?;
