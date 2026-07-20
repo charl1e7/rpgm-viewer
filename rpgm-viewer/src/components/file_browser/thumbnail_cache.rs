@@ -2,7 +2,7 @@ use log::{debug, error, info, trace};
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
-    sync::{mpsc, Arc},
+    sync::{Arc, mpsc},
     thread,
     time::SystemTime,
 };

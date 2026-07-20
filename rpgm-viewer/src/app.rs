@@ -1,4 +1,4 @@
-use log::{debug, info, trace};
+use log::{debug, trace};
 
 use crate::components::audio::AudioState;
 use crate::components::crypt_manager::CryptManager;
@@ -7,6 +7,7 @@ use crate::components::dropped_file::DroppedFile;
 use crate::components::file_browser::FileBrowser;
 use crate::components::image_viewer::ImageViewer;
 use crate::components::ui_settings::UiSettings;
+use egui::Panel;
 
 #[derive(serde::Deserialize, serde::Serialize, Default)]
 #[serde(default)]
@@ -39,16 +40,17 @@ impl eframe::App for ImageViewerApp {
         eframe::set_value(storage, eframe::APP_KEY, self);
     }
 
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.ui_settings.apply(ctx);
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
+        self.ui_settings.apply(&ctx);
 
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.file_browser.current_image = None;
             debug!("Esc pressed, current_image reset to None");
         }
 
-        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            egui::menu::bar(ui, |ui| {
+        Panel::top("top_panel").show(ui, |ui| {
+            ui.horizontal(|ui| {
                 ui.menu_button("Menu", |ui| {
                     if ui.button("Open Folder...").clicked() {
                         if let Some(path) = rfd::FileDialog::new().pick_folder() {
@@ -75,20 +77,20 @@ impl eframe::App for ImageViewerApp {
 
         if self.ui_settings.show_ui_settings {
             use crate::components::ui_settings::ui::UiSettingsWindow;
-            UiSettingsWindow::show(ctx, &mut self.ui_settings, &mut self.file_browser);
+            UiSettingsWindow::show(&ctx, &mut self.ui_settings, &mut self.file_browser);
         }
 
         if self.crypt_settings.show_settings() {
-            CryptSettingsWindow::show(ctx, &mut self.crypt_settings);
+            CryptSettingsWindow::show(&ctx, &mut self.crypt_settings);
         }
 
-        egui::SidePanel::left("files_panel")
+        Panel::left("files_panel")
             .resizable(true)
-            .default_width(200.0)
-            .show(ctx, |ui| {
+            .default_size(200.0)
+            .show(ui, |ui| {
                 self.file_browser.show(
                     ui,
-                    ctx,
+                    &ctx,
                     &mut self.crypt_settings,
                     &self.ui_settings,
                     &mut self.audio,
@@ -96,25 +98,23 @@ impl eframe::App for ImageViewerApp {
             });
 
         if self.audio.is_audio_loaded() {
-            egui::TopBottomPanel::bottom("audio_player")
-                .min_height(60.0)
-                .show(ctx, |ui| {
-                    self.audio.show(ui);
-                });
+            Panel::bottom("audio_player").min_size(60.0).show(ui, |ui| {
+                self.audio.show(ui);
+            });
         }
 
         self.image_viewer
-            .show(ctx, &mut self.crypt_settings, &mut self.file_browser);
+            .show(ui, &mut self.crypt_settings, &mut self.file_browser);
 
         if self.ui_settings.show_logger {
             egui::Window::new("Log")
                 .open(&mut self.ui_settings.show_logger)
-                .show(ctx, |ui| {
+                .show(&ctx, |ui| {
                     egui_logger::logger_ui().show(ui);
                 });
         }
 
         self.dropped_file
-            .show(ctx, &mut self.crypt_settings, &mut self.file_browser);
+            .show(&ctx, &mut self.crypt_settings, &mut self.file_browser);
     }
 }

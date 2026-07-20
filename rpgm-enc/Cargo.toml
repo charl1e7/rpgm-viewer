@@ -1,7 +1,7 @@
 [package]
 name = "rpgm-enc"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 base64 = "0.22"
@@ -11,10 +11,10 @@ serde_json = "1"
 thiserror = "2.0"
 
 [dev-dependencies]
-symphonia = { version = "0.5", features = ["ogg", "isomp4"] }
-symphonia-bundle-mp3 = "0.5"
-symphonia-codec-vorbis = "0.5"
-symphonia-core = "0.5"
-symphonia-format-ogg = "0.5"
+symphonia = { version = "0.6", features = ["ogg", "isomp4"] }
+symphonia-bundle-mp3 = "0.6"
+symphonia-codec-vorbis = "0.6"
+symphonia-core = "0.6"
+symphonia-format-ogg = "0.6"
 image = "0.25"
 

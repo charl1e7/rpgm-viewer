@@ -7,11 +7,12 @@ use super::ImageViewer;
 impl ImageViewer {
     pub fn show(
         &mut self,
-        ctx: &egui::Context,
+        ui: &mut egui::Ui,
         crypt_manager: &mut CryptManager,
         file_browser: &mut FileBrowser,
     ) {
-        egui::CentralPanel::default().show(ctx, |ui| {
+        let ctx = ui.ctx().clone();
+        egui::CentralPanel::default().show(ui, |ui| {
             if let Some((path, texture)) = &file_browser.current_image {
                 egui::containers::Frame::new().show(ui, |ui| {
                     ui.with_layout(
@@ -52,7 +53,7 @@ impl ImageViewer {
                             .pick_file()
                         {
                             if let Some(decrypter) = crypt_manager.get_decrypter() {
-                                match Self::load_image(&path, ctx, Some(decrypter.clone())) {
+                                match Self::load_image(&path, &ctx, Some(decrypter.clone())) {
                                     Some(texture) => {
                                         file_browser.current_image =
                                             Some((path.to_path_buf(), texture));

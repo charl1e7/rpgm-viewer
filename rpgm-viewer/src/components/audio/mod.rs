@@ -1,6 +1,6 @@
 use cpal::{
-    traits::{DeviceTrait, HostTrait, StreamTrait},
     Device, SampleFormat, StreamConfig,
+    traits::{DeviceTrait, HostTrait, StreamTrait},
 };
 use rpgm_enc::Decrypter;
 use std::{
@@ -10,12 +10,11 @@ use std::{
     time::Duration,
 };
 use symphonia::core::{
-    audio::{SampleBuffer, Signal},
-    codecs::{DecoderOptions, CODEC_TYPE_NULL},
-    formats::{FormatOptions, SeekMode, SeekTo},
+    codecs::audio::AudioDecoderOptions,
+    errors::Error as SymphoniaError,
+    formats::{FormatOptions, TrackType, probe::Hint},
     io::MediaSourceStream,
     meta::MetadataOptions,
-    probe::Hint,
 };
 
 pub mod ui;
@@ -52,7 +51,7 @@ pub struct AudioState {
     sample_rate: u32,
     read_position: Arc<AtomicUsize>,
     total_samples: Arc<AtomicUsize>,
-    volume: Arc<AtomicU32>, 
+    volume: Arc<AtomicU32>,
 }
 
 impl AudioState {
@@ -102,11 +101,10 @@ impl AudioState {
 
         let meta_opts = MetadataOptions::default();
         let fmt_opts = FormatOptions::default();
-        let probed = symphonia::default::get_probe()
-            .format(&hint, mss, &fmt_opts, &meta_opts)
+        let mut format = symphonia::default::get_probe()
+            .probe(&hint, mss, fmt_opts, meta_opts)
             .map_err(|e| format!("Error probing media: {}", e))?;
 
-        let mut format = probed.format;
         let mut metadata = TrackMetadata::default();
         metadata.filename = path
             .file_name()
@@ -115,16 +113,16 @@ impl AudioState {
             .to_string();
 
         if let Some(metadata_rev) = format.metadata().current() {
-            for tag in metadata_rev.tags() {
-                match tag.std_key {
-                    Some(symphonia::core::meta::StandardTagKey::TrackTitle) => {
-                        metadata.title = Some(tag.value.to_string());
+            for tag in &metadata_rev.media.tags {
+                match &tag.std {
+                    Some(symphonia::core::meta::StandardTag::TrackTitle(v)) => {
+                        metadata.title = Some(v.to_string());
                     }
-                    Some(symphonia::core::meta::StandardTagKey::Artist) => {
-                        metadata.artist = Some(tag.value.to_string());
+                    Some(symphonia::core::meta::StandardTag::Artist(v)) => {
+                        metadata.artist = Some(v.to_string());
                     }
-                    Some(symphonia::core::meta::StandardTagKey::Album) => {
-                        metadata.album = Some(tag.value.to_string());
+                    Some(symphonia::core::meta::StandardTag::Album(v)) => {
+                        metadata.album = Some(v.to_string());
                     }
                     _ => {}
                 }
@@ -132,39 +130,57 @@ impl AudioState {
         }
 
         let track = format
-            .default_track()
-            .ok_or("No default track found in the audio file")?;
-        let mut decoder = symphonia::default::get_codecs()
-            .make(&track.codec_params, &DecoderOptions::default())
-            .map_err(|e| format!("Error creating decoder: {}", e))?;
+            .default_track(TrackType::Audio)
+            .ok_or("No default audio track found in the file")?;
+        let track_id = track.id;
 
-        if let Some(time_base) = track.codec_params.time_base {
-            if let Some(n_frames) = track.codec_params.n_frames {
-                let duration = n_frames as f64 * time_base.numer as f64 / time_base.denom as f64;
-                metadata.duration = Duration::from_secs_f64(duration);
-            }
+        if let (Some(time_base), Some(n_frames)) = (track.time_base, track.num_frames) {
+            let duration =
+                (n_frames as f64) * (time_base.numer.get() as f64) / (time_base.denom.get() as f64);
+            metadata.duration = Duration::from_secs_f64(duration);
         }
 
-        let mut audio_buffer = Vec::new();
-        let sample_rate = track.codec_params.sample_rate.unwrap_or(44100);
+        let audio_params = track
+            .codec_params
+            .as_ref()
+            .and_then(|p| p.audio())
+            .ok_or("No audio codec parameters found")?
+            .clone();
+
+        let mut decoder = symphonia::default::get_codecs()
+            .make_audio_decoder(&audio_params, &AudioDecoderOptions::default())
+            .map_err(|e| format!("Error creating decoder: {}", e))?;
+
+        let sample_rate = audio_params.sample_rate.unwrap_or(44100);
         self.sample_rate = sample_rate;
+
+        let mut audio_buffer = Vec::new();
 
         loop {
             let packet = match format.next_packet() {
-                Ok(packet) => packet,
-                Err(symphonia::core::errors::Error::IoError(_))
-                | Err(symphonia::core::errors::Error::ResetRequired) => {
-                    break;
-                }
+                Ok(Some(packet)) => packet,
+                Ok(None) => break,
+                Err(SymphoniaError::ResetRequired) => break,
+                Err(SymphoniaError::IoError(_)) => break,
                 Err(e) => {
                     return Err(format!("Error reading packet: {}", e));
                 }
             };
 
+            while !format.metadata().is_latest() {
+                format.metadata().pop();
+            }
+
+            if packet.track_id != track_id {
+                continue;
+            }
+
             let decoded = match decoder.decode(&packet) {
                 Ok(decoded) => decoded,
-                Err(symphonia::core::errors::Error::IoError(_)) => {
-                    break;
+                Err(SymphoniaError::IoError(_)) => break,
+                Err(SymphoniaError::DecodeError(_)) => {
+                    log::warn!("Error decoding packet, skipping");
+                    continue;
                 }
                 Err(e) => {
                     log::warn!("Error decoding packet: {}", e);
@@ -172,11 +188,9 @@ impl AudioState {
                 }
             };
 
-            let spec = *decoded.spec();
-            let mut sample_buffer = SampleBuffer::<f32>::new(decoded.capacity() as u64, spec);
-            sample_buffer.copy_interleaved_ref(decoded);
-            let samples = sample_buffer.samples();
-            audio_buffer.extend_from_slice(samples);
+            let mut packet_samples = vec![0.0f32; decoded.samples_interleaved()];
+            decoded.copy_to_slice_interleaved(&mut packet_samples);
+            audio_buffer.extend_from_slice(&packet_samples);
         }
 
         *self.audio_buffer.lock().unwrap() = audio_buffer;
@@ -211,7 +225,7 @@ impl AudioState {
 
         let stream = device
             .build_output_stream(
-                &config,
+                config,
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                     let mut pos = read_position.load(Ordering::Relaxed);
                     let total = total_samples.load(Ordering::Relaxed);
@@ -226,7 +240,7 @@ impl AudioState {
                             *sample = 0.0;
                         }
                     }
-                    
+
                     read_position.store(pos, Ordering::Relaxed);
                 },
                 |err| log::error!("Error in audio stream: {}", err),

@@ -1,5 +1,5 @@
 use super::AudioState;
-use egui::{Color32, Frame, Id, RichText, Rounding, Stroke, Vec2};
+use egui::RichText;
 use std::time::Duration;
 
 impl AudioState {

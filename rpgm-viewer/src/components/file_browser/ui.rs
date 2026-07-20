@@ -1,5 +1,5 @@
-use super::file_entry::FileEntry;
 use super::FileBrowser;
+use super::file_entry::FileEntry;
 use std::path::{Path, PathBuf};
 
 use crate::components::audio::AudioState;
@@ -383,7 +383,7 @@ impl FileBrowser {
                     }
                 }
             }
-            ui.close_menu();
+            ui.close();
         }
 
         ui.separator();
@@ -393,7 +393,7 @@ impl FileBrowser {
                 Ok(_) => info!("Successfully encrypted folder: {:?}", entry.path),
                 Err(e) => error!("Failed to encrypt folder {:?}: {}", entry.path, e),
             }
-            ui.close_menu();
+            ui.close();
         }
 
         if ui.button("Decrypt All Files").clicked() {
@@ -401,14 +401,14 @@ impl FileBrowser {
                 Ok(_) => info!("Successfully decrypted folder: {:?}", entry.path),
                 Err(e) => error!("Failed to decrypt folder {:?}: {}", entry.path, e),
             }
-            ui.close_menu();
+            ui.close();
         }
 
         ui.separator();
 
         if ui.button("🗑 Delete").clicked() {
             self.show_delete_confirmation = Some((entry.path.clone(), true));
-            ui.close_menu();
+            ui.close();
         }
     }
 
@@ -432,11 +432,7 @@ impl FileBrowser {
         }
 
         let icon = if self.is_image_file(&entry.path) {
-            if entry.is_encrypted {
-                "🔒"
-            } else {
-                "🖼"
-            }
+            if entry.is_encrypted { "🔒" } else { "🖼" }
         } else if self.is_audio_file(&entry.path) {
             if entry.is_encrypted {
                 "🔒🎵"
@@ -515,7 +511,7 @@ impl FileBrowser {
                     let crypt_settings = crypt_manager.get_mut_settings().unwrap();
                     crypt_settings.update_encryption_key(&key);
                 }
-                ui.close_menu();
+                ui.close();
             }
             ui.separator();
         }
@@ -525,14 +521,14 @@ impl FileBrowser {
                 if let Err(e) = crypt_manager.decrypt_image(&entry.path, self) {
                     error!("Failed to decrypt {:?}: {}", entry.path, e);
                 }
-                ui.close_menu();
+                ui.close();
             }
         } else {
             if ui.button("Encrypt").clicked() {
                 if let Err(e) = crypt_manager.encrypt_image(&entry.path, self) {
                     error!("Failed to encrypt {:?}: {}", entry.path, e);
                 }
-                ui.close_menu();
+                ui.close();
             }
         }
 
@@ -540,7 +536,7 @@ impl FileBrowser {
 
         if ui.button("🗑 Delete").clicked() {
             self.show_delete_confirmation = Some((entry.path.clone(), false));
-            ui.close_menu();
+            ui.close();
         }
     }
 

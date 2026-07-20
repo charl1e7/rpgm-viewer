@@ -214,7 +214,6 @@ impl FileExtension {
                 (Self::OGG, RPGMakerVersion::MV) => Self::RPGMVO,
                 (Self::M4A, RPGMakerVersion::MZ) => Self::M4A_,
                 (Self::M4A, RPGMakerVersion::MV) => Self::RPGMVM,
-                _ => *self,
             }
         }
     }

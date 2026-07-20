@@ -33,31 +33,33 @@ impl Default for UiSettings {
 impl UiSettings {
     pub fn apply(&mut self, ctx: &egui::Context) {
         ctx.set_pixels_per_point(self.ui_scale);
-        let mut style = (*ctx.style()).clone();
-        style.text_styles = [
-            (
-                egui::TextStyle::Heading,
-                egui::FontId::new(self.font_size * 1.2, egui::FontFamily::Proportional),
-            ),
-            (
-                egui::TextStyle::Body,
-                egui::FontId::new(self.font_size, egui::FontFamily::Proportional),
-            ),
-            (
-                egui::TextStyle::Monospace,
-                egui::FontId::new(self.font_size, egui::FontFamily::Monospace),
-            ),
-            (
-                egui::TextStyle::Button,
-                egui::FontId::new(self.font_size, egui::FontFamily::Proportional),
-            ),
-            (
-                egui::TextStyle::Small,
-                egui::FontId::new(self.font_size * 0.8, egui::FontFamily::Proportional),
-            ),
-        ]
-        .into();
-        ctx.set_style(style);
+        let font_size = self.font_size;
+
+        ctx.all_styles_mut(|style| {
+            style.text_styles = [
+                (
+                    egui::TextStyle::Heading,
+                    egui::FontId::new(font_size * 1.2, egui::FontFamily::Proportional),
+                ),
+                (
+                    egui::TextStyle::Body,
+                    egui::FontId::new(font_size, egui::FontFamily::Proportional),
+                ),
+                (
+                    egui::TextStyle::Monospace,
+                    egui::FontId::new(font_size, egui::FontFamily::Monospace),
+                ),
+                (
+                    egui::TextStyle::Button,
+                    egui::FontId::new(font_size, egui::FontFamily::Proportional),
+                ),
+                (
+                    egui::TextStyle::Small,
+                    egui::FontId::new(font_size * 0.8, egui::FontFamily::Proportional),
+                ),
+            ]
+            .into();
+        });
     }
 
     pub fn toggle_ui_settings(&mut self) {

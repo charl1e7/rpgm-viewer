@@ -10,7 +10,7 @@ use crate::components::file_browser;
 
 use super::{
     crypt_settings::CryptSettings,
-    file_browser::{file_entry::FileEntry, FileBrowser},
+    file_browser::{FileBrowser, file_entry::FileEntry},
 };
 
 #[derive(serde::Deserialize, serde::Serialize, Default)]

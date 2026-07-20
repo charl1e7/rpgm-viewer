@@ -11,7 +11,7 @@ impl ImageViewer {
     pub fn load_image(
         path: &std::path::Path,
         ctx: &egui::Context,
-        decrypter: Option<Decrypter>, 
+        decrypter: Option<Decrypter>,
     ) -> Option<egui::TextureHandle> {
         let file_data = std::fs::read(path).ok()?;
 
