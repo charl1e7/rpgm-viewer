@@ -1,11 +1,11 @@
+use serde::{Deserialize, Serialize};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum RPGMakerVersion {
     #[default]
     MV,
     MZ,
 }
-
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Key {
@@ -64,12 +64,31 @@ impl Key {
     }
 
     pub fn from_rpg_core(content: &str) -> Option<Self> {
-        content
-            .lines()
-            .find(|line| line.contains("this._encryptionKey"))
-            .and_then(|line| line.split('"').nth(1))
-            .map(|s| s.to_string())
-            .and_then(|key| Self::new(&key))
+        for line in content.lines() {
+            if let Some(idx) = line.find("this._encryptionKey") {
+                let rest = &line[idx + "this._encryptionKey".len()..];
+                let mut quote_char = None;
+                let mut start_idx = None;
+
+                for (i, ch) in rest.char_indices() {
+                    if ch == '\'' || ch == '"' {
+                        if quote_char.is_none() {
+                            quote_char = Some(ch);
+                            start_idx = Some(i + ch.len_utf8());
+                        } else if Some(ch) == quote_char {
+                            if let Some(start) = start_idx {
+                                let key_candidate = &rest[start..i];
+                                if let Some(key) = Self::new(key_candidate) {
+                                    return Some(key);
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        None
     }
 
     pub fn as_bytes(&self) -> &[u8] {
@@ -124,20 +143,15 @@ pub enum FileType {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileExtension {
-    // Normal extensions
     PNG,
     OGG,
     M4A,
-
-    // Encrypted MV extensions
-    RPGMVP, // PNG
-    RPGMVO, // OGG
-    RPGMVM, // M4A
-
-    // Encrypted MZ extensions
-    PNG_, // PNG
-    OGG_, // OGG
-    M4A_, // M4A
+    RPGMVP,
+    RPGMVO,
+    RPGMVM,
+    PNG_,
+    OGG_,
+    M4A_,
 }
 
 impl FileExtension {
@@ -203,17 +217,17 @@ impl FileExtension {
                 _ => *self,
             }
         } else {
-            match (self, version) {
-                (Self::RPGMVP | Self::PNG_, _) => *self,
-                (Self::RPGMVO | Self::OGG_, _) => *self,
-                (Self::RPGMVM | Self::M4A_, _) => *self,
-
-                (Self::PNG, RPGMakerVersion::MZ) => Self::PNG_,
-                (Self::PNG, RPGMakerVersion::MV) => Self::RPGMVP,
-                (Self::OGG, RPGMakerVersion::MZ) => Self::OGG_,
-                (Self::OGG, RPGMakerVersion::MV) => Self::RPGMVO,
-                (Self::M4A, RPGMakerVersion::MZ) => Self::M4A_,
-                (Self::M4A, RPGMakerVersion::MV) => Self::RPGMVM,
+            match (self.get_file_type(), version) {
+                (FileType::Image, RPGMakerVersion::MV) => Self::RPGMVP,
+                (FileType::Image, RPGMakerVersion::MZ) => Self::PNG_,
+                (FileType::Audio, RPGMakerVersion::MV) => match self {
+                    Self::M4A | Self::RPGMVM | Self::M4A_ => Self::RPGMVM,
+                    _ => Self::RPGMVO,
+                },
+                (FileType::Audio, RPGMakerVersion::MZ) => match self {
+                    Self::M4A | Self::RPGMVM | Self::M4A_ => Self::M4A_,
+                    _ => Self::OGG_,
+                },
             }
         }
     }

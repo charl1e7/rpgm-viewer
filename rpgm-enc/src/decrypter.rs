@@ -18,6 +18,9 @@ pub struct Decrypter {
     png_header_len: Option<usize>,
     ogg_header_len: Option<usize>,
     m4a_header_len: Option<usize>,
+
+    // Cached fake header
+    fake_header_cache: Vec<u8>,
 }
 
 impl Decrypter {
@@ -25,13 +28,20 @@ impl Decrypter {
     const DEFAULT_SIGNATURE: &'static str = "5250474d56000000";
     const DEFAULT_VERSION: &'static str = "000301";
     const DEFAULT_REMAIN: &'static str = "0000000000";
-    const PNG_HEADER_BYTES: &'static str = "89 50 4E 47 0D 0A 1A 0A 00 00 00 0D 49 48 44 52";
-    const OGG_HEADER_BYTES: &'static str =
-        "4F 67 67 53 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00";
-    const M4A_HEADER_BYTES: &'static str = "00 00 00 20 66 74 79 70 4D 34 41 20 00 00 00 00";
+
+    const PNG_HEADER_BYTES: &'static [u8] = &[
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    ];
+    const OGG_HEADER_BYTES: &'static [u8] = &[
+        0x4F, 0x67, 0x67, 0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    ];
+    const M4A_HEADER_BYTES: &'static [u8] = &[
+        0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x4D, 0x34, 0x41, 0x20, 0x00, 0x00, 0x00, 0x00,
+    ];
 
     pub fn new(key: Option<Key>) -> Self {
-        Decrypter {
+        let mut decrypter = Decrypter {
             key,
             ignore_fake_header: false,
             header_len: None,
@@ -41,16 +51,38 @@ impl Decrypter {
             png_header_len: None,
             ogg_header_len: None,
             m4a_header_len: None,
+            fake_header_cache: Vec::new(),
+        };
+        decrypter.rebuild_fake_header();
+        decrypter
+    }
+
+    pub fn rebuild_fake_header(&mut self) {
+        let header_len = self.get_header_len();
+        let header_structure = format!(
+            "{}{}{}",
+            self.get_signature(),
+            self.get_version(),
+            self.get_remain()
+        );
+
+        let mut fake_header = vec![0u8; header_len];
+        for i in 0..header_len {
+            if i * 2 + 2 <= header_structure.len() {
+                let hex_str = &header_structure[i * 2..i * 2 + 2];
+                fake_header[i] = u8::from_str_radix(hex_str, 16).unwrap_or(0);
+            }
         }
+        self.fake_header_cache = fake_header;
+    }
+
+    pub fn build_fake_header(&self) -> &[u8] {
+        &self.fake_header_cache
     }
 
     pub fn from_file(file_contents: &[u8]) -> Option<Self> {
         let key = Self::detect_key_from_file(file_contents);
-        if let Some(key) = key {
-            Some(Self::new(Some(key)))
-        } else {
-            None
-        }
+        key.map(|k| Self::new(Some(k)))
     }
 
     pub fn verify_fake_header(&self, file_header: &[u8]) -> bool {
@@ -59,29 +91,7 @@ impl Decrypter {
             return false;
         }
 
-        for i in 0..self.get_header_len() {
-            if file_header[i] != fake_header[i] {
-                return false;
-            }
-        }
-        true
-    }
-
-    fn build_fake_header(&self) -> Vec<u8> {
-        let mut fake_header = vec![0u8; self.get_header_len()];
-        let header_structure = format!(
-            "{}{}{}",
-            self.get_signature(),
-            self.get_version(),
-            self.get_remain()
-        );
-
-        for i in 0..self.get_header_len() {
-            let hex_str = &header_structure[i * 2..i * 2 + 2];
-            fake_header[i] = u8::from_str_radix(hex_str, 16).unwrap_or(0);
-        }
-
-        fake_header
+        file_header[..self.get_header_len()] == fake_header[..self.get_header_len()]
     }
 
     pub fn decrypt(&self, data: &[u8]) -> Result<Vec<u8>> {
@@ -101,9 +111,7 @@ impl Decrypter {
             }
         }
 
-        // Rem fake header
-        let mut content = data[self.get_header_len()..].to_vec();
-
+        let mut content = data[header_len..].to_vec();
         self.xor_bytes(&mut content);
 
         Ok(content)
@@ -119,7 +127,7 @@ impl Decrypter {
 
         let fake_header = self.build_fake_header();
         let mut result = Vec::with_capacity(content.len() + self.get_header_len());
-        result.extend_from_slice(&fake_header);
+        result.extend_from_slice(fake_header);
         result.extend_from_slice(&content);
 
         if !self.verify_fake_header(&result[0..self.get_header_len()]) {
@@ -175,10 +183,11 @@ impl Decrypter {
             ),
         };
 
-        let header = Self::get_header_bytes(header_bytes, correct_header_len);
+        let len = correct_header_len.min(header_bytes.len());
+        let header = &header_bytes[..len];
 
-        let has_fake_header = if data.len() >= self.get_header_len() {
-            self.verify_fake_header(&data[0..self.get_header_len()])
+        let has_fake_header = if data.len() >= fake_header_len {
+            self.verify_fake_header(&data[0..fake_header_len])
         } else {
             false
         };
@@ -193,7 +202,7 @@ impl Decrypter {
         };
 
         let mut result = Vec::with_capacity(content.len() + correct_header_len);
-        result.extend_from_slice(&header);
+        result.extend_from_slice(header);
         result.extend_from_slice(content);
 
         Ok(result)
@@ -256,17 +265,6 @@ impl Decrypter {
         }
     }
 
-    pub fn byte_to_hex(byte: u8) -> String {
-        format!("{:02x}", byte)
-    }
-
-    pub fn check_hex_chars(s: &str) -> bool {
-        s.chars().all(|c| c.is_ascii_hexdigit())
-    }
-
-    pub fn helper_show_bits(byte: u8) -> String {
-        format!("{:08b}", byte)
-    }
 }
 
 #[cfg(test)]
