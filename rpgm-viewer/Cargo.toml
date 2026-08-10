@@ -29,7 +29,9 @@ walkdir = "2.5"
 rpgm-enc = { path = "../rpgm-enc" }
 cpal = "0.18"
 symphonia = { version = "0.6", features = ["aac", "isomp4"] }
-egui_logger = "0.11"
+egui_logger = { path = "../egui_logger" }
+chrono = "0.4"
+regex = "1.13"
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

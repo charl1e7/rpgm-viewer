@@ -6,6 +6,7 @@ use crate::components::crypt_settings::ui::CryptSettingsWindow;
 use crate::components::dropped_file::DroppedFile;
 use crate::components::file_browser::FileBrowser;
 use crate::components::image_viewer::ImageViewer;
+use crate::components::logger;
 use crate::components::ui_settings::UiSettings;
 use egui::Panel;
 
@@ -110,10 +111,9 @@ impl eframe::App for ImageViewerApp {
             egui::Window::new("Log")
                 .open(&mut self.ui_settings.show_logger)
                 .show(&ctx, |ui| {
-                    egui_logger::logger_ui().show(ui);
+                    logger::logger_ui().show(ui);
                 });
         }
-
         self.dropped_file
             .show(&ctx, &mut self.crypt_settings, &mut self.file_browser);
     }

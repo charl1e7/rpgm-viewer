@@ -2,7 +2,8 @@
 resolver = "2"
 members = [
     "rpgm-viewer",
-    "rpgm-enc"
+    "rpgm-enc", 
+    "egui_logger"
 ]
 
 

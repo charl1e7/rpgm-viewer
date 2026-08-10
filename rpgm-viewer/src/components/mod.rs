@@ -4,4 +4,5 @@ pub mod crypt_settings;
 pub mod dropped_file;
 pub mod file_browser;
 pub mod image_viewer;
+pub mod logger;
 pub mod ui_settings;
