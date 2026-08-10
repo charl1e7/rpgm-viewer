@@ -47,10 +47,7 @@ impl FileBrowser {
     fn show_search_bar(&mut self, ui: &mut egui::Ui) -> bool {
         ui.horizontal(|ui| {
             ui.label("🔍");
-            let search_field = ui.add(
-                egui::TextEdit::singleline(&mut self.search_query)
-                    .desired_width((ui.available_width() - 30.0).max(10.0)),
-            );
+            let search_field = ui.text_edit_singleline(&mut self.search_query);
             let changed = search_field.changed();
 
             if changed {
