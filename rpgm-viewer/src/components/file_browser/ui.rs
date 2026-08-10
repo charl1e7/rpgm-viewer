@@ -174,12 +174,8 @@ impl FileBrowser {
         ui_settings: &UiSettings,
         audio: &mut AudioState,
     ) {
-        let should_load_thumbnails = ui_settings.show_thumbnails;
-
-        if should_load_thumbnails {
-            if let Some(decrypter) = crypt_manager.get_decrypter() {
-                self.process_thumbnails(ui, ctx, &mut entries, &decrypter, ui_settings);
-            }
+        if ui_settings.show_thumbnails {
+            self.process_thumbnails(ctx, &mut entries);
         }
 
         self.render_file_list(ui, &entries, ctx, crypt_manager, audio, ui_settings);
@@ -207,30 +203,12 @@ impl FileBrowser {
             });
     }
 
-    fn process_thumbnails(
-        &mut self,
-        ui: &mut egui::Ui,
-        ctx: &egui::Context,
-        entries: &mut Vec<FileEntry>,
-        decrypter: &Decrypter,
-        ui_settings: &UiSettings,
-    ) {
-        if !ui_settings.should_show_thumbnails() {
-            return;
-        }
-
-        if self.all_thumbnails_loaded && !self.thumbnail_cache.has_pending_loads() {
-            trace!("All thumbnails loaded, skipping processing");
-            return;
-        }
-
+    fn process_thumbnails(&mut self, ctx: &egui::Context, entries: &mut Vec<FileEntry>) {
         let loaded_thumbnails = self.thumbnail_cache.process_results(ctx);
         if !loaded_thumbnails.is_empty() {
             debug!("Received {} new thumbnails", loaded_thumbnails.len());
             self.apply_loaded_thumbnails(entries, loaded_thumbnails);
         }
-
-        self.request_visible_thumbnails(ui, entries, decrypter, ui_settings);
         self.update_caches(entries);
     }
 
@@ -254,50 +232,11 @@ impl FileBrowser {
         }
     }
 
-    fn request_visible_thumbnails(
-        &mut self,
-        ui: &mut egui::Ui,
-        entries: &mut Vec<FileEntry>,
-        decrypter: &Decrypter,
-        ui_settings: &UiSettings,
-    ) {
-        let visible_rect = ui.clip_rect();
-        let mut requested = 0;
-
-        for entry in entries.iter_mut() {
-            if entry.is_folder
-                || !self.is_image_file(&entry.path)
-                || entry.thumbnail.is_some()
-                || self.thumbnail_cache.is_pending(&entry.path)
-                || self.thumbnail_cache.get(&entry.path).is_some()
-                || self.thumbnail_cache.is_failed(&entry.path)
-            {
-                continue;
-            }
-
-            let entry_rect = ui.max_rect();
-            if !entry_rect.intersects(visible_rect) {
-                continue;
-            }
-
-            self.thumbnail_cache.request_thumbnail(
-                &entry.path,
-                decrypter,
-                ui_settings.get_thumbnail_compression_size(),
-            );
-            requested += 1;
-        }
-
-        if requested > 0 {
-            debug!("Requested {} new thumbnails", requested);
-        }
-    }
-
-    fn update_caches(&mut self, entries: &Vec<FileEntry>) {
+    fn update_caches(&mut self, entries: &[FileEntry]) {
         if !self.search_query.is_empty() {
-            self.search_results_cache = Some((self.search_query.clone(), entries.clone()));
+            self.search_results_cache = Some((self.search_query.clone(), entries.to_vec()));
         } else {
-            self.entries_cache = Some(entries.clone());
+            self.entries_cache = Some(entries.to_vec());
         }
     }
 
@@ -310,7 +249,7 @@ impl FileBrowser {
         audio: &mut AudioState,
         ui_settings: &UiSettings,
     ) {
-        ui.horizontal(|ui| {
+        let row_response = ui.horizontal(|ui| {
             if entry.nesting_level > 0 {
                 let indent_amount = if ui_settings.show_thumbnails {
                     entry.nesting_level as f32 * 12.0
@@ -348,6 +287,21 @@ impl FileBrowser {
                 }
             }
         });
+
+        if ui_settings.show_thumbnails
+            && !entry.is_folder
+            && self.is_image_file(&entry.path)
+            && entry.thumbnail.is_none()
+            && ui.is_rect_visible(row_response.response.rect)
+        {
+            if let Some(decrypter) = crypt_manager.get_decrypter() {
+                self.thumbnail_cache.request_thumbnail(
+                    &entry.path,
+                    decrypter,
+                    ui_settings.get_thumbnail_compression_size(),
+                );
+            }
+        }
     }
 
     fn show_folder_entry(
@@ -419,7 +373,7 @@ impl FileBrowser {
     fn show_file_icon(&self, ui: &mut egui::Ui, entry: &FileEntry, ui_settings: &UiSettings) {
         if ui_settings.show_thumbnails {
             if let Some(texture) = entry.thumbnail.as_ref() {
-                let display_size = ui_settings.thumbnail_size as f32;
+                let display_size = ui_settings.thumbnail_size;
 
                 ui.add(
                     egui::Image::new(texture)
@@ -595,29 +549,5 @@ impl FileBrowser {
                     });
                 });
         }
-    }
-
-    fn load_thumbnail(
-        &mut self,
-        path: &Path,
-        _ctx: &egui::Context,
-        decrypter: &Decrypter,
-        ui_settings: &UiSettings,
-    ) -> Option<egui::TextureHandle> {
-        if let Some(texture) = self.thumbnail_cache.get(path) {
-            return Some(texture);
-        }
-
-        if self.thumbnail_cache.is_failed(path) {
-            return None;
-        }
-
-        self.thumbnail_cache.request_thumbnail(
-            path,
-            decrypter,
-            ui_settings.get_thumbnail_compression_size(),
-        );
-
-        None
     }
 }

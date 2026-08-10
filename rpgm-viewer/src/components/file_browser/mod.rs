@@ -1,7 +1,7 @@
 pub mod file_entry;
 pub mod thumbnail_cache;
 pub mod ui;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use crate::components::ui_settings::UiSettings;
@@ -63,7 +63,7 @@ impl FileBrowser {
         self.all_thumbnails_loaded = false;
     }
 
-    pub fn check_and_update_cache(&mut self, root: &PathBuf, ui_settings: &UiSettings) {
+    pub fn check_and_update_cache(&mut self, root: &Path, ui_settings: &UiSettings) {
         let now = SystemTime::now();
         let cache_update_interval = ui_settings.get_cache_update_interval();
 
