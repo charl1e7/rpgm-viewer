@@ -47,7 +47,10 @@ impl FileBrowser {
     fn show_search_bar(&mut self, ui: &mut egui::Ui) -> bool {
         ui.horizontal(|ui| {
             ui.label("🔍");
-            let search_field = ui.text_edit_singleline(&mut self.search_query);
+            let search_field = ui.add(
+                egui::TextEdit::singleline(&mut self.search_query)
+                    .desired_width((ui.available_width() - 30.0).max(10.0)),
+            );
             let changed = search_field.changed();
 
             if changed {
@@ -191,7 +194,7 @@ impl FileBrowser {
         audio: &mut AudioState,
         ui_settings: &UiSettings,
     ) {
-        egui::ScrollArea::vertical()
+        egui::ScrollArea::both()
             .id_salt("file_list_scroll")
             .auto_shrink([false; 2])
             .stick_to_bottom(false)
@@ -310,7 +313,7 @@ impl FileBrowser {
         ui.horizontal(|ui| {
             if entry.nesting_level > 0 {
                 let indent_amount = if ui_settings.show_thumbnails {
-                    entry.nesting_level as f32 * 40.0
+                    entry.nesting_level as f32 * 12.0
                 } else {
                     entry.nesting_level as f32 * 20.0
                 };
@@ -326,7 +329,7 @@ impl FileBrowser {
                     ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                         self.show_file_icon(ui, entry, ui_settings);
 
-                        let response = ui.button(&entry.name());
+                        let response = ui.add(egui::Button::new(&entry.name()).truncate());
                         if response.clicked() {
                             self.handle_file_click(entry, ctx, crypt_manager, audio);
                         }
@@ -336,7 +339,7 @@ impl FileBrowser {
                     });
                 } else {
                     self.show_file_icon(ui, entry, ui_settings);
-                    let response = ui.button(&entry.name());
+                    let response = ui.add(egui::Button::new(&entry.name()).truncate());
                     if response.clicked() {
                         self.handle_file_click(entry, ctx, crypt_manager, audio);
                     }
@@ -354,7 +357,8 @@ impl FileBrowser {
         crypt_manager: &mut CryptManager,
     ) {
         ui.label("📁");
-        let response = ui.button(&entry.name());
+        let response = ui.add(egui::Button::new(&entry.name()).truncate());
+
         if response.clicked() {
             let crypt_settings = crypt_manager.get_mut_settings().unwrap();
             crypt_settings.toggle_folder_expansion(&entry.path);

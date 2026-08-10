@@ -88,6 +88,7 @@ impl eframe::App for ImageViewerApp {
         Panel::left("files_panel")
             .resizable(true)
             .default_size(200.0)
+            .min_size(10.0)
             .show(ui, |ui| {
                 self.file_browser.show(
                     ui,
