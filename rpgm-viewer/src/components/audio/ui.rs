@@ -12,28 +12,9 @@ impl AudioState {
         ui.vertical(|ui| {
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
-                    if let Some(title) = &metadata.title {
-                        ui.add(egui::Label::new(RichText::new(title).size(18.0).strong()));
-                    } else {
-                        ui.add(egui::Label::new(
-                            RichText::new(&metadata.filename).size(18.0).strong(),
-                        ));
-                    }
-
-                    let mut info_text = String::new();
-                    if let Some(artist) = &metadata.artist {
-                        info_text.push_str(artist);
-                        if metadata.album.is_some() {
-                            info_text.push_str(" - ");
-                        }
-                    }
-                    if let Some(album) = &metadata.album {
-                        info_text.push_str(album);
-                    }
-
-                    if !info_text.is_empty() {
-                        ui.add(egui::Label::new(RichText::new(info_text).size(14.0)));
-                    }
+                    ui.add(egui::Label::new(
+                        RichText::new(&metadata.filename).size(18.0).strong(),
+                    ));
                 });
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -59,7 +40,7 @@ impl AudioState {
                         self.stop_audio();
                     }
 
-                    if self.is_playing {
+                    if self.is_playing() {
                         if ui.button(RichText::new("⏸").size(18.0)).clicked() {
                             self.pause_audio();
                         }

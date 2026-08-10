@@ -27,11 +27,10 @@ image = "0.25"
 rfd = "0.17"
 walkdir = "2.5"
 rpgm-enc = { path = "../rpgm-enc" }
-cpal = "0.18"
-symphonia = { version = "0.6", features = ["aac", "isomp4"] }
 egui_logger = { path = "../egui_logger" }
 chrono = "0.4"
 regex = "1.13"
+rodio = { version = "0.22", features = ["symphonia-all", "wasm-bindgen"] }
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
