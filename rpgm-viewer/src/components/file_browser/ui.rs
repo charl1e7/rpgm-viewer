@@ -472,8 +472,15 @@ impl FileBrowser {
     ) {
         if self.is_audio_file(&entry.path) {
             if let Some(decrypter) = crypt_manager.get_decrypter() {
-                if let Err(e) = audio.play_audio(&entry.path, decrypter) {
-                    error!("Failed to play audio file {:?}: {}", entry.path, e);
+                match std::fs::read(&entry.path) {
+                    Ok(raw_bytes) => {
+                        if let Err(e) = audio.play_audio(&entry.name(), &raw_bytes, decrypter) {
+                            error!("Failed to play audio file {:?}: {}", entry.path, e);
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to read audio file {:?}: {}", entry.path, e);
+                    }
                 }
             } else {
                 error!(

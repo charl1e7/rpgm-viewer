@@ -2,11 +2,8 @@ use rodio::{
     ChannelCount, Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, SampleRate,
     buffer::SamplesBuffer, source::Source,
 };
-use rpgm_enc::Decrypter;
-use std::{
-    path::{Path, PathBuf},
-    time::Duration,
-};
+use rpgm_enc::{Decrypter, FileExtension};
+use std::{path::Path, time::Duration};
 
 pub mod ui;
 
@@ -20,7 +17,7 @@ pub struct AudioState {
     _stream: Option<MixerDeviceSink>,
     player: Option<Player>,
     current_samples: Option<(ChannelCount, SampleRate, Vec<f32>)>,
-    current_audio: Option<PathBuf>,
+    current_audio_name: Option<String>,
     current_metadata: TrackMetadata,
     volume: f32,
 }
@@ -33,58 +30,71 @@ impl Default for AudioState {
 
 impl AudioState {
     pub fn new() -> Self {
+        let stream = Self::try_init_stream();
+        Self {
+            _stream: stream,
+            player: None,
+            current_samples: None,
+            current_audio_name: None,
+            current_metadata: TrackMetadata::default(),
+            volume: 1.0,
+        }
+    }
+
+    fn try_init_stream() -> Option<MixerDeviceSink> {
         match DeviceSinkBuilder::open_default_sink() {
             Ok(mut stream) => {
                 stream.log_on_drop(false);
-                Self {
-                    _stream: Some(stream),
-                    player: None,
-                    current_samples: None,
-                    current_audio: None,
-                    current_metadata: TrackMetadata::default(),
-                    volume: 1.0,
-                }
+                Some(stream)
             }
             Err(e) => {
-                log::error!("Failed to open default audio output stream: {}", e);
-                Self {
-                    _stream: None,
-                    player: None,
-                    current_samples: None,
-                    current_audio: None,
-                    current_metadata: TrackMetadata::default(),
-                    volume: 1.0,
-                }
+                log::warn!("Audio output device not ready or blocked by browser: {}", e);
+                None
             }
         }
     }
 
-    pub fn play_audio(&mut self, path: &Path, decrypter: &Decrypter) -> Result<(), String> {
+    pub fn play_audio(
+        &mut self,
+        filename: &str,
+        raw: &[u8],
+        decrypter: &Decrypter,
+    ) -> Result<(), String> {
         self.stop_audio();
+
+        if self._stream.is_none() {
+            self._stream = Self::try_init_stream();
+        }
 
         let stream = self
             ._stream
             .as_ref()
-            .ok_or("No audio output device available")?;
+            .ok_or("No audio output device available. Please grant audio permissions.")?;
 
-        let raw = std::fs::read(path).map_err(|e| format!("Failed to read audio file: {}", e))?;
+        let ext_str = Path::new(filename)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("");
 
-        let data = if path.extension().map_or(false, |ext| {
-            matches!(
-                ext.to_str().unwrap_or(""),
-                "ogg_" | "rpgmvo" | "m4a_" | "rpgmvm"
-            )
-        }) {
-            decrypter
-                .decrypt(&raw)
-                .map_err(|e| format!("Failed to decrypt audio: {}", e))?
+        let data = if let Some(ext) = FileExtension::from_str(ext_str) {
+            if ext.is_encrypted() {
+                let decrypted = decrypter
+                    .decrypt(raw)
+                    .map_err(|e| format!("Failed to decrypt audio: {}", e))?;
+
+                decrypter
+                    .restore_header(&decrypted, ext)
+                    .map_err(|e| format!("Failed to restore audio header: {}", e))?
+            } else {
+                raw.to_vec()
+            }
         } else {
-            raw
+            raw.to_vec()
         };
 
         let cursor = std::io::Cursor::new(data);
-        let decoder =
-            Decoder::try_from(cursor).map_err(|e| format!("Failed to decode audio: {}", e))?;
+        let decoder = Decoder::try_from(cursor)
+            .map_err(|e| format!("Failed to decode audio format: {}", e))?;
 
         let channels = decoder.channels();
         let sample_rate = decoder.sample_rate();
@@ -104,15 +114,11 @@ impl AudioState {
 
         self.current_samples = Some((channels, sample_rate, samples));
         self.current_metadata = TrackMetadata {
-            filename: path
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string(),
+            filename: filename.to_string(),
             duration,
         };
         self.player = Some(player);
-        self.current_audio = Some(path.to_path_buf());
+        self.current_audio_name = Some(filename.to_string());
 
         Ok(())
     }
@@ -121,7 +127,7 @@ impl AudioState {
         if let Some(player) = self.player.take() {
             player.clear();
         }
-        self.current_audio = None;
+        self.current_audio_name = None;
         self.current_samples = None;
     }
 
@@ -248,6 +254,6 @@ impl AudioState {
     }
 
     pub fn is_audio_loaded(&self) -> bool {
-        self.current_audio.is_some()
+        self.current_audio_name.is_some()
     }
 }
