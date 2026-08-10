@@ -24,21 +24,19 @@ impl DroppedFile {
         if !ctx.input(|i| i.raw.dropped_files.is_empty()) {
             ctx.input(|i| {
                 for file in &i.raw.dropped_files {
-                    if let Some(path) = &file.path {
-                        debug!("Dropped path: {}", path.display());
-                        if path.is_dir() {
-                            trace!("Setting current directory: {}", path.display());
-                            crypt_manager
-                                .set_current_directory(path.to_path_buf(), Some(file_browser));
-                        } else if let Some(ext) = path.extension() {
-                            trace!("Dropped file extension: {}", ext.to_string_lossy());
-                            if let Some(ext_str) = ext.to_str() {
-                                if ["png", "jpg", "jpeg", "gif", "bmp", "webp", "png_", "rpgmvp"]
-                                    .contains(&ext_str.to_lowercase().as_str())
-                                {
-                                    trace!("Scheduling image load for next frame");
-                                    self.pending_load = Some(path.to_path_buf());
-                                }
+                    let path = file.path();
+                    debug!("Dropped path: {}", path.display());
+                    if path.is_dir() {
+                        trace!("Setting current directory: {}", path.display());
+                        crypt_manager.set_current_directory(path.to_path_buf(), Some(file_browser));
+                    } else if let Some(ext) = path.extension() {
+                        trace!("Dropped file extension: {}", ext.to_string_lossy());
+                        if let Some(ext_str) = ext.to_str() {
+                            if ["png", "jpg", "jpeg", "gif", "bmp", "webp", "png_", "rpgmvp"]
+                                .contains(&ext_str.to_lowercase().as_str())
+                            {
+                                trace!("Scheduling image load for next frame");
+                                self.pending_load = Some(path.to_path_buf());
                             }
                         }
                     }
