@@ -120,8 +120,8 @@ impl CryptManager {
         settings.crypt_path = Some(path.clone());
         self.settings.insert(path.clone(), settings);
 
-        if let Some(crypt_settings) = self.get_settings() {
-            if crypt_settings.encryption_key.is_none() {
+        if let Some(settings) = self.settings.get(&path) {
+            if settings.encryption_key.is_none() {
                 let walker = walkdir::WalkDir::new(&path)
                     .into_iter()
                     .filter_map(|e| e.ok());

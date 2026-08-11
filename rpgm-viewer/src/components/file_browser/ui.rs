@@ -80,7 +80,10 @@ impl FileBrowser {
         crypt_manager: &CryptManager,
         ui_settings: &UiSettings,
     ) {
-        let crypt_settings = crypt_manager.get_settings().unwrap();
+        let Some(crypt_settings) = crypt_manager.get_settings() else {
+            self.entries_cache = Some(Vec::new());
+            return;
+        };
         let expanded_folders = crypt_settings.get_expanded_folders();
         let dir_metadata = std::fs::metadata(root).ok().and_then(|m| m.modified().ok());
 
@@ -121,7 +124,7 @@ impl FileBrowser {
     fn get_filtered_entries(&mut self, root: &Path) -> Vec<FileEntry> {
         if self.search_query.is_empty() {
             self.search_results_cache = None;
-            return self.entries_cache.as_ref().unwrap().clone();
+            return self.entries_cache.clone().unwrap_or_default();
         } else {
             return self.update_search_results(root);
         }

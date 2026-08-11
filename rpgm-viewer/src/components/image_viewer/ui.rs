@@ -20,6 +20,9 @@ impl ImageViewer {
                         |ui| {
                             let available_size = ui.available_size();
                             let texture_size = texture.size_vec2();
+                            if texture_size.x <= 0.0 || texture_size.y <= 0.0 {
+                                return;
+                            }
                             let aspect_ratio = texture_size.x / texture_size.y;
 
                             let mut size = available_size;
