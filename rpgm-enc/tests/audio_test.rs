@@ -68,7 +68,7 @@ fn verify_audio_format(data: &[u8], format_hint: &str) -> bool {
                     return false;
                 }
             },
-            Ok(None) => break, 
+            Ok(None) => break,
             Err(e) => {
                 println!("Error reading packet: {:?}", e);
                 return false;

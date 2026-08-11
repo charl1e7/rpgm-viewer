@@ -82,8 +82,8 @@ impl FileBrowser {
     ) {
         let crypt_settings = crypt_manager.get_settings().unwrap();
         let expanded_folders = crypt_settings.get_expanded_folders();
-
         let dir_metadata = std::fs::metadata(root).ok().and_then(|m| m.modified().ok());
+
         let needs_update = self.entries_cache.is_none()
             || self.last_expanded_state != expanded_folders
             || self.last_update_time.map_or(true, |last| {
@@ -141,10 +141,10 @@ impl FileBrowser {
                 .collect();
 
             self.preserve_thumbnails(&mut filtered_entries, &UiSettings::default());
-
             debug!("Found {} matches for '{}'", filtered_entries.len(), query);
             self.search_results_cache = Some((self.search_query.clone(), filtered_entries));
         }
+
         self.search_results_cache.as_ref().unwrap().1.clone()
     }
 
@@ -158,7 +158,6 @@ impl FileBrowser {
                 return true;
             }
         }
-
         entry.name().to_lowercase().contains(query)
     }
 
@@ -174,7 +173,6 @@ impl FileBrowser {
         if ui_settings.show_thumbnails {
             self.process_thumbnails(ctx, &mut entries);
         }
-
         self.render_file_list(ui, &entries, ctx, crypt_manager, audio, ui_settings);
     }
 
@@ -202,10 +200,12 @@ impl FileBrowser {
 
     fn process_thumbnails(&mut self, ctx: &egui::Context, entries: &mut Vec<FileEntry>) {
         let loaded_thumbnails = self.thumbnail_cache.process_results(ctx);
+
         if !loaded_thumbnails.is_empty() {
             debug!("Received {} new thumbnails", loaded_thumbnails.len());
             self.apply_loaded_thumbnails(entries, loaded_thumbnails);
         }
+
         self.update_caches(entries);
     }
 
@@ -261,10 +261,8 @@ impl FileBrowser {
             } else {
                 if ui_settings.show_thumbnails && entry.thumbnail.is_some() {
                     ui.set_min_height(ui_settings.thumbnail_size);
-
                     ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                         self.show_file_icon(ui, entry, ui_settings);
-
                         let response = ui.add(egui::Button::new(&entry.name()).truncate());
                         if response.clicked() {
                             self.handle_file_click(entry, ctx, crypt_manager, audio);
@@ -309,12 +307,10 @@ impl FileBrowser {
     ) {
         ui.label("📁");
         let response = ui.add(egui::Button::new(&entry.name()).truncate());
-
         if response.clicked() {
             let crypt_settings = crypt_manager.get_mut_settings().unwrap();
             crypt_settings.toggle_folder_expansion(&entry.path);
         }
-
         response.context_menu(|ui| self.show_folder_context_menu(ui, entry, crypt_manager));
     }
 
@@ -324,18 +320,12 @@ impl FileBrowser {
         entry: &FileEntry,
         crypt_manager: &mut CryptManager,
     ) {
-        if ui.button("Extract Key from PNG_/RPGMVP...").clicked() {
+        if ui.button("Extract Key...").clicked() {
             let entries = FileEntry::collect_entries(&entry.path);
             for entry in entries {
-                if entry
-                    .path
-                    .extension()
-                    .map_or(false, |ext| ext == "png_" || ext == "rpgmvp")
-                {
-                    if let Some(key) = crypt_manager.try_extract_key(&entry.path) {
-                        crypt_manager.update_encryption_key(&key);
-                        break;
-                    }
+                if let Some(key) = crypt_manager.try_extract_key(&entry.path) {
+                    crypt_manager.update_encryption_key(&key);
+                    break;
                 }
             }
             ui.close();
@@ -371,7 +361,6 @@ impl FileBrowser {
         if ui_settings.show_thumbnails {
             if let Some(texture) = entry.thumbnail.as_ref() {
                 let display_size = ui_settings.thumbnail_size;
-
                 ui.add(
                     egui::Image::new(texture)
                         .fit_to_exact_size(egui::vec2(display_size, display_size))
@@ -397,6 +386,7 @@ impl FileBrowser {
         } else {
             "📄"
         };
+
         ui.label(icon);
     }
 
@@ -463,15 +453,17 @@ impl FileBrowser {
         entry: &FileEntry,
         crypt_manager: &mut CryptManager,
     ) {
-        if entry
-            .path
-            .extension()
-            .map_or(false, |ext| ext == "png_" || ext == "rpgmvp")
-        {
+        let can_extract_key = entry.path.extension().map_or(false, |ext| {
+            matches!(
+                ext.to_str().unwrap_or(""),
+                "png_" | "rpgmvp" | "ogg_" | "rpgmvo"
+            )
+        });
+
+        if can_extract_key {
             if ui.button("Extract Key").clicked() {
                 if let Some(key) = crypt_manager.try_extract_key(&entry.path) {
-                    let crypt_settings = crypt_manager.get_mut_settings().unwrap();
-                    crypt_settings.update_encryption_key(&key);
+                    crypt_manager.update_encryption_key(&key);
                 }
                 ui.close();
             }
@@ -506,6 +498,7 @@ impl FileBrowser {
         if let Some((path, is_folder)) = &self.show_delete_confirmation {
             let path = path.clone();
             let is_folder = *is_folder;
+
             egui::Window::new("Confirm Delete")
                 .collapsible(false)
                 .resizable(false)
@@ -522,6 +515,7 @@ impl FileBrowser {
                         ));
                         ui.label(path.to_string_lossy().to_string());
                         ui.add_space(10.0);
+
                         ui.horizontal(|ui| {
                             if ui.button("Cancel").clicked() {
                                 self.show_delete_confirmation = None;

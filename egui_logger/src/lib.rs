@@ -1,7 +1,7 @@
+use log::SetLoggerError;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 use std::sync::Mutex;
-use log::SetLoggerError;
 
 pub const LEVELS: [log::Level; log::Level::Trace as usize] = [
     log::Level::Error,

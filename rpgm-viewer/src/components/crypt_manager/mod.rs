@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    str::FromStr,
 };
 
 use log::info;
@@ -31,6 +30,7 @@ impl CryptManager {
             None
         }
     }
+
     pub fn get_settings(&self) -> Option<&CryptSettings> {
         if let Some(current_folder) = &self.current_folder {
             self.settings.get(current_folder)
@@ -67,65 +67,49 @@ impl CryptManager {
         }
     }
 
+    fn ext_from_path(path: &Path) -> Option<rpgm_enc::FileExtension> {
+        let ext_str = path.extension()?.to_str()?;
+        rpgm_enc::FileExtension::from_str(ext_str)
+    }
+
     pub fn try_extract_key(&self, path: &Path) -> Option<rpgm_enc::Key> {
-        if !path
-            .extension()
-            .map_or(false, |ext| ext == "png_" || ext == "rpgmvp")
-        {
-            info!(
-                "Skipping key extraction - file is not png_ or rpgmvp: {:?}",
-                path
-            );
+        let ext = Self::ext_from_path(path)?;
+        if !ext.is_encrypted() {
+            info!("Skipping key extraction - not encrypted: {:?}", path);
             return None;
         }
 
         info!("Attempting to extract key from file: {:?}", path);
-        if let Ok(file_data) = std::fs::read(path) {
-            let header_len = rpgm_enc::Decrypter::new(None).get_header_len();
-            info!(
-                "File size: {}, header length: {}",
-                file_data.len(),
-                header_len
-            );
-            info!(
-                "First 32 bytes of file: {:02X?}",
-                &file_data[..32.min(file_data.len())]
-            );
-
-            match rpgm_enc::Decrypter::detect_key_from_file(&file_data) {
-                Some(key) => {
-                    info!("Successfully extracted key: {}", key.as_str());
-                    Some(key)
-                }
-                None => {
-                    info!("Failed to extract key - no valid encryption code found");
-                    None
-                }
+        let file_data = match std::fs::read(path) {
+            Ok(d) => d,
+            Err(e) => {
+                info!("Failed to read file: {:?}, {}", path, e);
+                return None;
             }
-        } else {
-            info!("Failed to read file: {:?}", path);
-            None
+        };
+
+        match rpgm_enc::Decrypter::detect_key(&file_data, ext) {
+            Some(key) => {
+                info!("Successfully extracted key: {}", key.as_str());
+                Some(key)
+            }
+            None => {
+                info!("Failed to extract key from {:?}", path);
+                None
+            }
         }
     }
 
     pub fn update_encryption_key(&mut self, key: &rpgm_enc::Key) {
         info!("Setting encryption key: {}", key.as_str());
-
         if let Some(crypt_settings) = self.get_mut_settings() {
-            info!(
-                "Previous encryption key: {:?}",
-                crypt_settings.encryption_key.as_ref().map(|k| k.as_str())
-            );
             crypt_settings.encryption_key = Some(key.clone());
-            info!("Updated settings with new key: {}", key.as_str());
             crypt_settings.decrypter = Some(rpgm_enc::Decrypter::new(Some(key.clone())));
-            info!("Created new decrypter with key: {}", key.as_str());
         }
     }
 
     pub fn set_current_directory(&mut self, path: PathBuf, file_browser: Option<&mut FileBrowser>) {
         info!("Setting current directory to: {}", path.display());
-
         if let Some(browser) = file_browser {
             browser.reset_cache();
         }
@@ -141,18 +125,14 @@ impl CryptManager {
                 let walker = walkdir::WalkDir::new(&path)
                     .into_iter()
                     .filter_map(|e| e.ok());
+
                 for entry in walker {
                     let file_path = entry.path().to_path_buf();
-                    info!("Checking file: {}", file_path.display());
-                    if file_path.extension().map_or(false, |ext| {
-                        matches!(ext.to_str().unwrap_or(""), "png_" | "rpgmvp")
-                    }) {
+                    let ext_str = file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+
+                    if matches!(ext_str, "png_" | "rpgmvp" | "ogg_" | "rpgmvo") {
                         if let Some(key) = self.try_extract_key(&file_path) {
-                            info!(
-                                "File is a valid key file: {} {}",
-                                file_path.display(),
-                                key.as_str()
-                            );
+                            info!("Found key in: {} -> {}", file_path.display(), key.as_str());
                             self.update_encryption_key(&key);
                             break;
                         }
@@ -164,70 +144,43 @@ impl CryptManager {
 
     pub fn handle_key_hex_input(&mut self, hex_str: String) {
         let hex_str = hex_str.replace(" ", "");
-        let key_bytes = (0..hex_str.len())
-            .step_by(2)
-            .filter_map(|i| {
-                if i + 2 <= hex_str.len() {
-                    u8::from_str_radix(&hex_str[i..i + 2], 16).ok()
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<u8>>();
-
-        let key_str = String::from_utf8_lossy(&key_bytes).to_string();
-        if let Ok(key) = rpgm_enc::Key::from_str(&key_str) {
+        if let Some(key) = rpgm_enc::Key::new(&hex_str) {
             self.update_encryption_key(&key);
         }
     }
 
     pub fn encrypt_file(&self, path: &Path) -> Result<(), String> {
         let file_data = std::fs::read(path).map_err(|e| e.to_string())?;
-        let mut rpg_file = rpgm_enc::RPGFile::new(path.to_path_buf()).map_err(|e| e.to_string())?;
-        rpg_file.set_content(file_data);
-
+        let ext = Self::ext_from_path(path).ok_or("Unknown file extension")?;
         let decrypter = self.get_decrypter().ok_or("No encryption key set")?;
-
         let encrypted_data = decrypter
-            .encrypt(rpg_file.content().unwrap())
+            .encrypt(&file_data, ext)
             .map_err(|e| e.to_string())?;
-        rpg_file.set_content(encrypted_data);
-
-        rpg_file.convert_extension(false);
-
-        std::fs::write(&path, rpg_file.content().unwrap()).map_err(|e| e.to_string())?;
-
+        std::fs::write(path, encrypted_data).map_err(|e| e.to_string())?;
         Ok(())
     }
 
     pub fn decrypt_file(&self, path: &Path) -> Result<Vec<u8>, String> {
         let file_data = std::fs::read(path).map_err(|e| e.to_string())?;
+        let ext = Self::ext_from_path(path).ok_or("Unknown file extension")?;
         let decrypter = self.get_decrypter().ok_or("No decryption key set")?;
-
         let decrypted_content = decrypter
-            .decrypt(&file_data)
+            .decrypt(&file_data, ext)
             .map_err(|e| format!("Decryption failed: {}", e))?;
-
         Ok(decrypted_content)
     }
 
     pub fn decrypt_file_with_header(&self, path: &Path) -> Result<Vec<u8>, String> {
         let file_data = std::fs::read(path).map_err(|e| e.to_string())?;
-        let mut rpg_file = rpgm_enc::RPGFile::new(path.to_path_buf()).map_err(|e| e.to_string())?;
-        rpg_file.set_content(file_data);
-
+        let ext = Self::ext_from_path(path).ok_or("Unknown file extension")?;
         let decrypter = self.get_decrypter().ok_or("No decryption key set")?;
 
         let decrypted_content = decrypter
-            .decrypt(rpg_file.content().unwrap())
+            .decrypt(&file_data, ext)
             .map_err(|e| format!("Decryption failed: {}", e))?;
 
-        let file_ext = rpg_file
-            .extension()
-            .ok_or("Could not determine file extension")?;
-
         let restored_content = decrypter
-            .restore_header(&decrypted_content, file_ext)
+            .restore_header(&decrypted_content, ext)
             .map_err(|e| format!("Header restoration failed: {}", e))?;
 
         Ok(restored_content)
@@ -300,57 +253,40 @@ impl CryptManager {
             .crypt_path
             .clone()
             .unwrap_or_else(|| root.clone());
-
         let decrypter = self.get_decrypter().ok_or("No encryption key set")?;
 
         info!("Starting encryption of file: {}", path.display());
         let file_data = std::fs::read(path).map_err(|e| e.to_string())?;
         info!("Read file content, size: {}", file_data.len());
 
-        let mut rpg_file = rpgm_enc::RPGFile::new(path.to_path_buf()).map_err(|e| e.to_string())?;
-        rpg_file.set_version(rpgmaker_version);
-        rpg_file.set_content(file_data);
-        info!(
-            "Created RPGFile, initial extension: {:?}",
-            rpg_file.extension()
-        );
+        let ext = Self::ext_from_path(path).ok_or("Unknown file extension")?;
 
         let encrypted_data = decrypter
-            .encrypt(rpg_file.content().unwrap())
+            .encrypt(&file_data, ext)
             .map_err(|e| e.to_string())?;
-        rpg_file.set_content(encrypted_data);
         info!(
             "Data encrypted successfully, size: {}",
-            rpg_file.content().unwrap().len()
+            encrypted_data.len()
         );
 
-        rpg_file.convert_extension(false);
-        info!(
-            "Converted to encrypted extension: {:?}",
-            rpg_file.extension()
-        );
+        let new_ext = ext.convert(false, rpgmaker_version);
+        info!("Converted to encrypted extension: {:?}", new_ext);
 
         let output_path = {
             let relative_path = path
                 .strip_prefix(&root)
                 .map_err(|e| format!("Failed to get relative path: {}", e))?;
-
             let mut full_path = crypt_path.join(relative_path);
-
             if let Some(parent) = full_path.parent() {
                 std::fs::create_dir_all(parent)
                     .map_err(|e| format!("Failed to create directories: {}", e))?;
             }
-
-            if let Some(ext) = rpg_file.extension() {
-                full_path.set_extension(ext.to_str());
-            }
-
+            full_path.set_extension(new_ext.to_str());
             info!("Final output path: {}", full_path.display());
             full_path
         };
 
-        std::fs::write(&output_path, rpg_file.content().unwrap()).map_err(|e| e.to_string())?;
+        std::fs::write(&output_path, &encrypted_data).map_err(|e| e.to_string())?;
 
         if output_path != path {
             let _ = std::fs::remove_file(path);
@@ -360,7 +296,6 @@ impl CryptManager {
             "Successfully wrote encrypted file to: {}",
             output_path.display()
         );
-
         file_browser.reset_cache();
         Ok(())
     }
@@ -376,7 +311,6 @@ impl CryptManager {
             .decrypt_path
             .clone()
             .unwrap_or_else(|| root.clone());
-
         let decrypter = self.get_decrypter().ok_or("No encryption key set")?;
 
         let file_data = std::fs::read(path).map_err(|e| e.to_string())?;
@@ -385,20 +319,14 @@ impl CryptManager {
             &file_data[..32.min(file_data.len())]
         );
 
-        let mut rpg_file = rpgm_enc::RPGFile::new(path.to_path_buf()).map_err(|e| e.to_string())?;
-        rpg_file.set_content(file_data);
-
-        if !rpg_file.is_encrypted() {
+        let ext = Self::ext_from_path(path).ok_or("Unknown file extension")?;
+        if !ext.is_encrypted() {
             return Err("File is not encrypted".to_string());
         }
-
-        let file_ext = rpg_file
-            .extension()
-            .ok_or("Could not determine file extension")?;
-        info!("Detected file type: {:?}", file_ext);
+        info!("Detected file type: {:?}", ext);
 
         let decrypted_content = decrypter
-            .decrypt(rpg_file.content().unwrap())
+            .decrypt(&file_data, ext)
             .map_err(|e| format!("Decryption failed: {}", e))?;
         info!(
             "Decrypted content first 32 bytes: {:02X?}",
@@ -406,42 +334,34 @@ impl CryptManager {
         );
 
         let restored_content = decrypter
-            .restore_header(&decrypted_content, file_ext)
+            .restore_header(&decrypted_content, ext)
             .map_err(|e| format!("Header restoration failed: {}", e))?;
         info!(
             "Restored content first 32 bytes: {:02X?}",
             &restored_content[..32.min(restored_content.len())]
         );
 
-        rpg_file.set_content(restored_content);
-        rpg_file.convert_extension(true);
+        let new_ext = ext.convert(true, crypt_settings.rpgmaker_version);
 
         let output_path = {
             let relative_path = path
                 .strip_prefix(&root)
                 .map_err(|e| format!("Failed to get relative path: {}", e))?;
-
             let mut full_path = decrypt_path.join(relative_path);
-
             if let Some(parent) = full_path.parent() {
                 std::fs::create_dir_all(parent)
                     .map_err(|e| format!("Failed to create directories: {}", e))?;
             }
-
-            if let Some(ext) = rpg_file.extension() {
-                full_path.set_extension(ext.to_str());
-            }
-
+            full_path.set_extension(new_ext.to_str());
             info!("Final output path: {}", full_path.display());
             full_path
         };
 
-        std::fs::write(&output_path, rpg_file.content().unwrap()).map_err(|e| e.to_string())?;
+        std::fs::write(&output_path, &restored_content).map_err(|e| e.to_string())?;
         info!(
             "Successfully wrote decrypted file to: {}",
             output_path.display()
         );
-
         file_browser.reset_cache();
         Ok(())
     }

@@ -1,8 +1,9 @@
 pub mod ui;
+
 use std::path::PathBuf;
 
 use log::{debug, error, trace};
-use rpgm_enc::Decrypter;
+use rpgm_enc::{Decrypter, FileExtension};
 
 #[derive(serde::Deserialize, serde::Serialize, Default)]
 pub struct ImageViewer {}
@@ -15,28 +16,32 @@ impl ImageViewer {
     ) -> Option<egui::TextureHandle> {
         let file_data = std::fs::read(path).ok()?;
 
+        let ext_str = path.extension()?.to_str()?;
+        let ext = FileExtension::from_str(ext_str)?;
+
         let decrypter = match decrypter {
             Some(d) => d,
             None => {
-                let key = Decrypter::detect_key_from_file(&file_data)?;
+                let key = Decrypter::detect_key(&file_data, ext)?;
                 Decrypter::new(Some(key))
             }
         };
-        let mut rpg_file = rpgm_enc::RPGFile::new(path.to_path_buf()).ok()?;
-        rpg_file.set_content(file_data);
+
         debug!(
-            "RPGFile state: encrypted={}, extension={:?}, key={:?}",
-            rpg_file.is_encrypted(),
-            rpg_file.extension(),
-            decrypter.key
+            "Image state: encrypted={}, ext={:?}",
+            ext.is_encrypted(),
+            ext
         );
 
-        let image_data = if rpg_file.is_encrypted() {
+        let image_data = if ext.is_encrypted() {
             trace!("File is encrypted, attempting to decrypt");
-            match decrypter.decrypt(rpg_file.content().unwrap()) {
+            match decrypter.decrypt(&file_data, ext) {
                 Ok(content) => {
                     trace!("Successfully decrypted content, size: {}", content.len());
-                    content
+                    match decrypter.restore_header(&content, ext) {
+                        Ok(restored) => restored,
+                        Err(_) => content,
+                    }
                 }
                 Err(e) => {
                     error!("Decryption failed: {}", e);
@@ -45,7 +50,7 @@ impl ImageViewer {
             }
         } else {
             trace!("File is not encrypted, using original content");
-            rpg_file.content().unwrap_or_default().to_vec()
+            file_data
         };
 
         match image::load_from_memory(&image_data) {

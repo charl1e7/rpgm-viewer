@@ -37,7 +37,6 @@ pub struct ThumbnailCache {
 impl ThumbnailCache {
     pub fn new() -> Self {
         info!("Creating new ThumbnailCache");
-
         let (task_tx, task_rx) = mpsc::channel();
         let (result_tx, result_rx) = mpsc::channel();
 
@@ -83,36 +82,34 @@ impl ThumbnailCache {
         let result = match std::fs::read(&task.path) {
             Ok(file_data) => {
                 trace!("File successfully read: {} bytes", file_data.len());
-                let mut rpg_file = match rpgm_enc::RPGFile::new(task.path.clone()) {
-                    Ok(file) => file,
-                    Err(e) => {
-                        error!("Error creating RPGFile: {:?}, {:?}", path, e);
-                        return ThumbnailResult {
-                            path,
-                            texture_data: None,
-                        };
-                    }
-                };
-                rpg_file.set_content(file_data);
 
-                let image_data = if rpg_file.is_encrypted() {
-                    trace!("File is encrypted, performing decryption");
-                    match task.decrypter.decrypt(rpg_file.content().unwrap()) {
-                        Ok(content) => {
-                            trace!("Decryption successful: {} bytes", content.len());
-                            content
+                let ext_str = task.path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                let ext = rpgm_enc::FileExtension::from_str(ext_str);
+
+                let image_data = if let Some(ext) = ext {
+                    if ext.is_encrypted() {
+                        trace!("File is encrypted, performing decryption");
+                        match task.decrypter.decrypt(&file_data, ext) {
+                            Ok(content) => {
+                                trace!("Decryption successful: {} bytes", content.len());
+                                match task.decrypter.restore_header(&content, ext) {
+                                    Ok(restored) => restored,
+                                    Err(_) => content,
+                                }
+                            }
+                            Err(e) => {
+                                error!("Error during decryption: {:?}, {:?}", path, e);
+                                return ThumbnailResult {
+                                    path,
+                                    texture_data: None,
+                                };
+                            }
                         }
-                        Err(e) => {
-                            error!("Error during decryption: {:?}, {:?}", path, e);
-                            return ThumbnailResult {
-                                path,
-                                texture_data: None,
-                            };
-                        }
+                    } else {
+                        file_data
                     }
                 } else {
-                    trace!("File is not encrypted");
-                    rpg_file.content().unwrap_or_default().to_vec()
+                    file_data
                 };
 
                 match image::load_from_memory(&image_data) {
@@ -144,7 +141,6 @@ impl ThumbnailCache {
     fn ensure_initialized(&mut self) {
         if self.channels.is_none() {
             info!("Initializing ThumbnailCache channels");
-
             let (task_tx, task_rx) = mpsc::channel();
             let (result_tx, result_rx) = mpsc::channel();
 
@@ -176,7 +172,6 @@ impl ThumbnailCache {
             self.mark_pending(path.to_path_buf());
 
             let decrypter_arc = Arc::new(decrypter.clone());
-
             let task = ThumbnailTask {
                 path: path.to_path_buf(),
                 decrypter: decrypter_arc,
@@ -192,7 +187,6 @@ impl ThumbnailCache {
 
     pub fn process_results(&mut self, ctx: &egui::Context) -> Vec<(PathBuf, egui::TextureHandle)> {
         let mut loaded_thumbnails = Vec::new();
-
         self.ensure_initialized();
 
         let channels = self
@@ -222,9 +216,11 @@ impl ThumbnailCache {
                         ..Default::default()
                     },
                 );
+
                 let modified_time = std::fs::metadata(&result.path)
                     .and_then(|m| m.modified())
                     .unwrap_or(SystemTime::now());
+
                 self.insert(result.path.clone(), texture.clone(), modified_time);
                 loaded_thumbnails.push((result.path.clone(), texture));
             } else {
@@ -253,6 +249,7 @@ impl ThumbnailCache {
 
     pub fn update_cache(&mut self, root: &Path) {
         let mut to_remove = Vec::new();
+
         for (path, (_, modified_time)) in self.cache.iter() {
             match std::fs::metadata(path) {
                 Ok(metadata) => {
@@ -330,15 +327,12 @@ impl ThumbnailCache {
     pub fn clear_cache(&mut self) {
         let cache_size = self.cache.len();
         let failed_size = self.failed_loads.len();
-
         debug!(
             "Clearing thumbnail cache: {} images, {} problematic files",
             cache_size, failed_size
         );
-
         self.cache.clear();
         self.failed_loads.clear();
-
         info!(
             "Thumbnail cache cleared: removed {} images and {} problematic files",
             cache_size, failed_size

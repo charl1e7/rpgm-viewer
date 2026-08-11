@@ -79,9 +79,8 @@ impl AudioState {
         let data = if let Some(ext) = FileExtension::from_str(ext_str) {
             if ext.is_encrypted() {
                 let decrypted = decrypter
-                    .decrypt(raw)
+                    .decrypt(raw, ext)
                     .map_err(|e| format!("Failed to decrypt audio: {}", e))?;
-
                 decrypter
                     .restore_header(&decrypted, ext)
                     .map_err(|e| format!("Failed to restore audio header: {}", e))?
@@ -98,7 +97,6 @@ impl AudioState {
 
         let channels = decoder.channels();
         let sample_rate = decoder.sample_rate();
-
         let samples: Vec<f32> = decoder.collect();
 
         let duration_secs =
@@ -106,7 +104,6 @@ impl AudioState {
         let duration = Duration::from_secs_f64(duration_secs);
 
         let source = SamplesBuffer::new(channels, sample_rate, samples.clone());
-
         let player = Player::connect_new(stream.mixer());
         player.set_volume(self.volume);
         player.append(source);
@@ -165,7 +162,6 @@ impl AudioState {
         if total <= Duration::ZERO {
             return;
         }
-
         let target = total.mul_f32(percent.clamp(0.0, 1.0));
 
         if let Some(player) = &self.player {

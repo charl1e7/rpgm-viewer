@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 pub const PNG_HEADER_BYTES: &[u8] = &[
-    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
-    0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -92,60 +91,60 @@ impl Key {
     }
 
     fn bruteforce_last_two_bytes(
-    header_len: usize,
-    data: &[u8],
-    partial_key: &[u8],
-) -> Option<Self> {
-    let payload = &data[header_len..];
+        header_len: usize,
+        data: &[u8],
+        partial_key: &[u8],
+    ) -> Option<Self> {
+        let payload = &data[header_len..];
 
-    let n_segments = payload[26] as usize;
-    if payload.len() < 27 + n_segments {
-        return None;
-    }
-    let data_len: usize = payload[27..27 + n_segments]
-        .iter()
-        .map(|&b| b as usize)
-        .sum();
-    let page_len = 27 + n_segments + data_len;
-    if payload.len() < page_len {
-        return None;
-    }
-
-    let stored_crc = u32::from_le_bytes([payload[22], payload[23], payload[24], payload[25]]);
-
-    let mut dec = payload[..page_len].to_vec();
-
-    for i in 0..14 {
-        dec[i] ^= partial_key[i];
-    }
-
-    let orig_14 = dec[14];
-    let orig_15 = dec[15];
-    let orig_22 = dec[22];
-    let orig_23 = dec[23];
-    let orig_24 = dec[24];
-    let orig_25 = dec[25];
-
-    for lo in 0u16..=0xFFFF {
-        let [b14, b15] = lo.to_le_bytes();
-
-        dec[14] = orig_14 ^ b14;
-        dec[15] = orig_15 ^ b15;
-        dec[22] = 0;
-        dec[23] = 0;
-        dec[24] = 0;
-        dec[25] = 0;
-
-        if ogg_crc32(&dec) == stored_crc {
-            let mut full_key = partial_key.to_vec();
-            full_key.push(b14);
-            full_key.push(b15);
-            let hex: String = full_key.iter().map(|b| format!("{:02x}", b)).collect();
-            return Self::new(&hex);
+        let n_segments = payload[26] as usize;
+        if payload.len() < 27 + n_segments {
+            return None;
         }
+        let data_len: usize = payload[27..27 + n_segments]
+            .iter()
+            .map(|&b| b as usize)
+            .sum();
+        let page_len = 27 + n_segments + data_len;
+        if payload.len() < page_len {
+            return None;
+        }
+
+        let stored_crc = u32::from_le_bytes([payload[22], payload[23], payload[24], payload[25]]);
+
+        let mut dec = payload[..page_len].to_vec();
+
+        for i in 0..14 {
+            dec[i] ^= partial_key[i];
+        }
+
+        let orig_14 = dec[14];
+        let orig_15 = dec[15];
+        let orig_22 = dec[22];
+        let orig_23 = dec[23];
+        let orig_24 = dec[24];
+        let orig_25 = dec[25];
+
+        for lo in 0u16..=0xFFFF {
+            let [b14, b15] = lo.to_le_bytes();
+
+            dec[14] = orig_14 ^ b14;
+            dec[15] = orig_15 ^ b15;
+            dec[22] = 0;
+            dec[23] = 0;
+            dec[24] = 0;
+            dec[25] = 0;
+
+            if ogg_crc32(&dec) == stored_crc {
+                let mut full_key = partial_key.to_vec();
+                full_key.push(b14);
+                full_key.push(b15);
+                let hex: String = full_key.iter().map(|b| format!("{:02x}", b)).collect();
+                return Self::new(&hex);
+            }
+        }
+        None
     }
-    None
-}
 
     fn find_ogg_serial_lo(tail: &[u8], serial_hi: [u8; 2]) -> Option<[u8; 2]> {
         if tail.len() < 27 {
