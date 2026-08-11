@@ -50,12 +50,12 @@ fn visuals() -> egui::Visuals {
     v.hyperlink_color = p.accent_bright;
     v.warn_fg_color = p.warn;
     v.error_fg_color = p.error;
-    
+
     v.text_edit_bg_color = Some(p.bg_extreme);
 
     v.window_corner_radius = CornerRadius::same(14);
     v.menu_corner_radius = CornerRadius::same(10);
-    
+
     v.window_shadow = Shadow {
         offset: [0, 10],
         blur: 28,
@@ -82,24 +82,24 @@ fn visuals() -> egui::Visuals {
 
     v.widgets.hovered.bg_fill = p.bg_widget_hover;
     v.widgets.hovered.weak_bg_fill = p.bg_widget_hover;
-    v.widgets.hovered.bg_stroke = Stroke::new(1.0, p.accent); 
+    v.widgets.hovered.bg_stroke = Stroke::new(1.0, p.accent);
     v.widgets.hovered.fg_stroke = Stroke::new(1.0, p.accent_bright);
     v.widgets.hovered.corner_radius = CornerRadius::same(9);
-    v.widgets.hovered.expansion = 0.0; 
+    v.widgets.hovered.expansion = 0.0;
 
     v.widgets.active.bg_fill = p.bg_widget_active;
     v.widgets.active.weak_bg_fill = p.bg_widget_active;
-    v.widgets.active.bg_stroke = Stroke::new(1.0, p.accent_bright); 
+    v.widgets.active.bg_stroke = Stroke::new(1.0, p.accent_bright);
     v.widgets.active.fg_stroke = Stroke::new(1.0, Color32::WHITE);
     v.widgets.active.corner_radius = CornerRadius::same(9);
-    v.widgets.active.expansion = 0.0; 
+    v.widgets.active.expansion = 0.0;
 
     v.widgets.open.bg_fill = p.bg_widget_active;
     v.widgets.open.weak_bg_fill = p.bg_widget_active;
-    v.widgets.open.bg_stroke = Stroke::new(1.0, p.accent); 
+    v.widgets.open.bg_stroke = Stroke::new(1.0, p.accent);
     v.widgets.open.fg_stroke = Stroke::new(1.0, p.text);
     v.widgets.open.corner_radius = CornerRadius::same(9);
-    v.widgets.open.expansion = 0.0; 
+    v.widgets.open.expansion = 0.0;
 
     v.indent_has_left_vline = false;
     v.striped = true;
