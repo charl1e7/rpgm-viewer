@@ -495,6 +495,9 @@ impl FileBrowser {
     }
 
     fn show_delete_confirmation_dialog(&mut self, ctx: &egui::Context) {
+        let mut delete_confirmed = false;
+        let mut cancel_clicked = false;
+
         if let Some((path, is_folder)) = &self.show_delete_confirmation {
             let path = path.clone();
             let is_folder = *is_folder;
@@ -518,7 +521,7 @@ impl FileBrowser {
 
                         ui.horizontal(|ui| {
                             if ui.button("Cancel").clicked() {
-                                self.show_delete_confirmation = None;
+                                cancel_clicked = true;
                             }
                             if ui.button("Delete").clicked() {
                                 if is_folder {
@@ -526,19 +529,47 @@ impl FileBrowser {
                                         error!("Failed to delete folder {:?}: {}", path, e);
                                     } else {
                                         info!("Successfully deleted folder: {:?}", path);
+                                        delete_confirmed = true;
                                     }
                                 } else {
                                     if let Err(e) = std::fs::remove_file(&path) {
                                         error!("Failed to delete file {:?}: {}", path, e);
                                     } else {
                                         info!("Successfully deleted file: {:?}", path);
+                                        delete_confirmed = true;
                                     }
                                 }
-                                self.show_delete_confirmation = None;
                             }
                         });
                     });
                 });
+        }
+
+        if cancel_clicked {
+            self.show_delete_confirmation = None;
+        }
+
+        if delete_confirmed {
+            if let Some((path, is_folder)) = &self.show_delete_confirmation {
+                if !is_folder {
+                    self.thumbnail_cache.remove(path);
+
+                    if let Some((current_path, _)) = &self.current_image {
+                        if current_path == path {
+                            self.current_image = None;
+                        }
+                    }
+                } else {
+                    if let Some((current_path, _)) = &self.current_image {
+                        if current_path.starts_with(path) {
+                            self.current_image = None;
+                        }
+                    }
+                }
+            }
+
+            self.reset_cache();
+            self.show_delete_confirmation = None;
         }
     }
 }
