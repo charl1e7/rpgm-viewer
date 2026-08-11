@@ -2,4 +2,5 @@
 
 mod app;
 mod components;
+mod theme;
 pub use app::ImageViewerApp;

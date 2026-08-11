@@ -19,9 +19,9 @@ impl Default for UiSettings {
         Self {
             show_logger: false,
             show_thumbnails: true,
-            thumbnail_size: 128.0,
-            ui_scale: 1.3,
-            font_size: 15.0,
+            thumbnail_size: 80.0,
+            ui_scale: 1.1,
+            font_size: 13.0,
             show_settings: false,
             show_ui_settings: false,
             thumbnail_compression_size: 256,

@@ -8,6 +8,7 @@ use crate::components::file_browser::FileBrowser;
 use crate::components::image_viewer::ImageViewer;
 use crate::components::logger;
 use crate::components::ui_settings::UiSettings;
+use crate::theme;
 use egui::Panel;
 
 #[derive(serde::Deserialize, serde::Serialize, Default)]
@@ -24,6 +25,8 @@ pub struct ImageViewerApp {
 
 impl ImageViewerApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        theme::apply(&cc.egui_ctx);
+
         if let Some(storage) = cc.storage {
             let mut app: Self = eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
             app.audio = AudioState::new();

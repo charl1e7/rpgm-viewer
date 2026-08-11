@@ -11,7 +11,7 @@ impl UiSettingsWindow {
                 ui.checkbox(&mut settings.show_thumbnails, "Show Thumbnails");
                 if settings.show_thumbnails {
                     ui.add(
-                        egui::Slider::new(&mut settings.thumbnail_size, 16.0..=128.0)
+                        egui::Slider::new(&mut settings.thumbnail_size, 16.0..=256.0)
                             .text("Thumbnail Size"),
                     );
 
