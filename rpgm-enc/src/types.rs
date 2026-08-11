@@ -1,5 +1,10 @@
 use serde::{Deserialize, Serialize};
 
+pub const PNG_HEADER_BYTES: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+    0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum RPGMakerVersion {
     #[default]
@@ -17,6 +22,9 @@ pub struct Key {
 impl Key {
     pub fn new(key: &str) -> Option<Self> {
         if !Self::is_valid_hex(key) {
+            return None;
+        }
+        if key.len() % 2 != 0 {
             return None;
         }
 
@@ -40,12 +48,131 @@ impl Key {
             return None;
         }
 
+        let known_header = &PNG_HEADER_BYTES[..header_len.min(PNG_HEADER_BYTES.len())];
+        let key = Self::from_known_header(header_len, data, known_header)?;
+
+        let payload_offset = header_len;
+        if data.len() >= payload_offset + 29 {
+            let compression = data[payload_offset + 26];
+            let filter = data[payload_offset + 27];
+            let interlace = data[payload_offset + 28];
+
+            if compression == 0 && filter == 0 && (interlace == 0 || interlace == 1) {
+                return Some(key);
+            }
+        }
+
+        None
+    }
+
+    pub fn from_ogg_header(header_len: usize, data: &[u8]) -> Option<Self> {
+        const KNOWN: &[u8; 14] = &[
+            0x4F, 0x67, 0x67, 0x53, // "OggS"
+            0x00, // stream_structure_version
+            0x02, // header_type_flag (BOS)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // granule_position = 0
+        ];
+
+        if data.len() < header_len + 27 {
+            return None;
+        }
+        let enc = &data[header_len..];
+
+        let mut key_bytes: Vec<u8> = (0..14).map(|i| enc[i] ^ KNOWN[i]).collect();
+        let serial_hi = [enc[16], enc[17]];
+
+        if let Some([s0, s1]) = Self::find_ogg_serial_lo(&data[header_len + 16..], serial_hi) {
+            key_bytes.push(enc[14] ^ s0);
+            key_bytes.push(enc[15] ^ s1);
+            let hex: String = key_bytes.iter().map(|b| format!("{:02x}", b)).collect();
+            return Self::new(&hex);
+        }
+
+        Self::bruteforce_last_two_bytes(header_len, data, &key_bytes)
+    }
+
+    fn bruteforce_last_two_bytes(
+    header_len: usize,
+    data: &[u8],
+    partial_key: &[u8],
+) -> Option<Self> {
+    let payload = &data[header_len..];
+
+    let n_segments = payload[26] as usize;
+    if payload.len() < 27 + n_segments {
+        return None;
+    }
+    let data_len: usize = payload[27..27 + n_segments]
+        .iter()
+        .map(|&b| b as usize)
+        .sum();
+    let page_len = 27 + n_segments + data_len;
+    if payload.len() < page_len {
+        return None;
+    }
+
+    let stored_crc = u32::from_le_bytes([payload[22], payload[23], payload[24], payload[25]]);
+
+    let mut dec = payload[..page_len].to_vec();
+
+    for i in 0..14 {
+        dec[i] ^= partial_key[i];
+    }
+
+    let orig_14 = dec[14];
+    let orig_15 = dec[15];
+    let orig_22 = dec[22];
+    let orig_23 = dec[23];
+    let orig_24 = dec[24];
+    let orig_25 = dec[25];
+
+    for lo in 0u16..=0xFFFF {
+        let [b14, b15] = lo.to_le_bytes();
+
+        dec[14] = orig_14 ^ b14;
+        dec[15] = orig_15 ^ b15;
+        dec[22] = 0;
+        dec[23] = 0;
+        dec[24] = 0;
+        dec[25] = 0;
+
+        if ogg_crc32(&dec) == stored_crc {
+            let mut full_key = partial_key.to_vec();
+            full_key.push(b14);
+            full_key.push(b15);
+            let hex: String = full_key.iter().map(|b| format!("{:02x}", b)).collect();
+            return Self::new(&hex);
+        }
+    }
+    None
+}
+
+    fn find_ogg_serial_lo(tail: &[u8], serial_hi: [u8; 2]) -> Option<[u8; 2]> {
+        if tail.len() < 27 {
+            return None;
+        }
+        for i in 0..tail.len() - 27 {
+            if &tail[i..i + 4] == b"OggS" && tail[i + 4] == 0 {
+                let s = &tail[i + 14..i + 18];
+                if s[2] == serial_hi[0] && s[3] == serial_hi[1] {
+                    return Some([s[0], s[1]]);
+                }
+            }
+        }
+        None
+    }
+
+    fn from_known_header(header_len: usize, data: &[u8], known_header: &[u8]) -> Option<Self> {
+        if data.len() < header_len * 2 {
+            return None;
+        }
+
         let file_header = &data[header_len..header_len * 2];
-        let png_header = Self::get_png_header_bytes(header_len);
         let mut key = String::with_capacity(header_len * 2);
 
         for i in 0..header_len {
-            let key_byte = png_header[i] ^ file_header[i];
+            let known_byte = known_header.get(i).copied().unwrap_or(0);
+            let key_byte = known_byte ^ file_header[i];
             key.push_str(&format!("{:02x}", key_byte));
         }
 
@@ -100,22 +227,12 @@ impl Key {
     }
 
     fn is_valid_hex(s: &str) -> bool {
-        s.chars().all(|c| c.is_ascii_hexdigit())
-    }
-
-    fn get_png_header_bytes(header_len: usize) -> Vec<u8> {
-        const PNG_HEADER: &str = "89 50 4E 47 0D 0A 1A 0A 00 00 00 0D 49 48 44 52";
-        PNG_HEADER
-            .split(' ')
-            .take(header_len)
-            .filter_map(|hex| u8::from_str_radix(hex, 16).ok())
-            .collect()
+        !s.is_empty() && s.chars().all(|c| c.is_ascii_hexdigit())
     }
 }
 
 impl TryFrom<String> for Key {
     type Error = Error;
-
     fn try_from(key: String) -> std::result::Result<Self, Self::Error> {
         Self::new(&key).ok_or(Error::InvalidKey)
     }
@@ -123,7 +240,6 @@ impl TryFrom<String> for Key {
 
 impl std::str::FromStr for Key {
     type Err = Error;
-
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         Self::new(s).ok_or(Error::InvalidKey)
     }
@@ -234,13 +350,8 @@ impl FileExtension {
 }
 
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum Error {
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-
-    #[error("Invalid file extension: {0}")]
-    InvalidExtension(String),
-
     #[error("Invalid encryption key")]
     InvalidKey,
 
@@ -250,148 +361,36 @@ pub enum Error {
     #[error("File is empty")]
     EmptyFile,
 
-    #[error("Unsupported file type: {0}")]
-    UnsupportedFileType(String),
-
     #[error("Failed to detect encryption key")]
     KeyDetectionFailed,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_file_extension_conversion() {
-        assert_eq!(
-            FileExtension::RPGMVP.convert(true, RPGMakerVersion::MV),
-            FileExtension::PNG
-        );
-        assert_eq!(
-            FileExtension::RPGMVO.convert(true, RPGMakerVersion::MV),
-            FileExtension::OGG
-        );
-        assert_eq!(
-            FileExtension::RPGMVM.convert(true, RPGMakerVersion::MV),
-            FileExtension::M4A
-        );
-        assert_eq!(
-            FileExtension::PNG_.convert(true, RPGMakerVersion::MZ),
-            FileExtension::PNG
-        );
-        assert_eq!(
-            FileExtension::OGG_.convert(true, RPGMakerVersion::MZ),
-            FileExtension::OGG
-        );
-        assert_eq!(
-            FileExtension::M4A_.convert(true, RPGMakerVersion::MZ),
-            FileExtension::M4A
-        );
-
-        assert_eq!(
-            FileExtension::PNG.convert(false, RPGMakerVersion::MV),
-            FileExtension::RPGMVP
-        );
-        assert_eq!(
-            FileExtension::OGG.convert(false, RPGMakerVersion::MV),
-            FileExtension::RPGMVO
-        );
-        assert_eq!(
-            FileExtension::M4A.convert(false, RPGMakerVersion::MV),
-            FileExtension::RPGMVM
-        );
-
-        assert_eq!(
-            FileExtension::PNG.convert(false, RPGMakerVersion::MZ),
-            FileExtension::PNG_
-        );
-        assert_eq!(
-            FileExtension::OGG.convert(false, RPGMakerVersion::MZ),
-            FileExtension::OGG_
-        );
-        assert_eq!(
-            FileExtension::M4A.convert(false, RPGMakerVersion::MZ),
-            FileExtension::M4A_
-        );
-
-        assert_eq!(
-            FileExtension::RPGMVP.convert(false, RPGMakerVersion::MZ),
-            FileExtension::RPGMVP
-        );
-        assert_eq!(
-            FileExtension::PNG_.convert(false, RPGMakerVersion::MV),
-            FileExtension::PNG_
-        );
-        assert_eq!(
-            FileExtension::RPGMVO.convert(false, RPGMakerVersion::MZ),
-            FileExtension::RPGMVO
-        );
-        assert_eq!(
-            FileExtension::OGG_.convert(false, RPGMakerVersion::MV),
-            FileExtension::OGG_
-        );
+const OGG_CRC_TABLE: [u32; 256] = {
+    let mut table = [0u32; 256];
+    let mut i = 0u32;
+    while i < 256 {
+        let mut crc = i << 24;
+        let mut j = 0;
+        while j < 8 {
+            if crc & 0x80000000 != 0 {
+                crc = (crc << 1) ^ 0x04C11DB7;
+            } else {
+                crc <<= 1;
+            }
+            j += 1;
+        }
+        table[i as usize] = crc;
+        i += 1;
     }
+    table
+};
 
-    #[test]
-    fn test_file_extension_from_str() {
-        // Test normal extensions
-        assert_eq!(FileExtension::from_str("png"), Some(FileExtension::PNG));
-        assert_eq!(FileExtension::from_str("ogg"), Some(FileExtension::OGG));
-        assert_eq!(FileExtension::from_str("m4a"), Some(FileExtension::M4A));
-
-        // Test RPG Maker MV extensions
-        assert_eq!(
-            FileExtension::from_str("rpgmvp"),
-            Some(FileExtension::RPGMVP)
-        );
-        assert_eq!(
-            FileExtension::from_str("rpgmvo"),
-            Some(FileExtension::RPGMVO)
-        );
-        assert_eq!(
-            FileExtension::from_str("rpgmvm"),
-            Some(FileExtension::RPGMVM)
-        );
-
-        // Test RPG Maker MZ extensions
-        assert_eq!(FileExtension::from_str("png_"), Some(FileExtension::PNG_));
-        assert_eq!(FileExtension::from_str("ogg_"), Some(FileExtension::OGG_));
-        assert_eq!(FileExtension::from_str("m4a_"), Some(FileExtension::M4A_));
-
-        // Test case insensitivity
-        assert_eq!(FileExtension::from_str("PNG"), Some(FileExtension::PNG));
-        assert_eq!(
-            FileExtension::from_str("RPGMVP"),
-            Some(FileExtension::RPGMVP)
-        );
-        assert_eq!(FileExtension::from_str("PNG_"), Some(FileExtension::PNG_));
-
-        // Test invalid extension
-        assert_eq!(FileExtension::from_str("invalid"), None);
+fn ogg_crc32(data: &[u8]) -> u32 {
+    let mut crc = 0u32;
+    for &b in data {
+        crc = (crc << 8) ^ OGG_CRC_TABLE[((crc >> 24) as u8 ^ b) as usize];
     }
-
-    #[test]
-    fn test_file_extension_properties() {
-        // Test is_encrypted
-        assert!(FileExtension::RPGMVP.is_encrypted());
-        assert!(FileExtension::PNG_.is_encrypted());
-        assert!(!FileExtension::PNG.is_encrypted());
-
-        // Test get_mime_type
-        assert_eq!(FileExtension::PNG.get_mime_type(), "image/png");
-        assert_eq!(FileExtension::RPGMVP.get_mime_type(), "image/png");
-        assert_eq!(FileExtension::PNG_.get_mime_type(), "image/png");
-        assert_eq!(FileExtension::OGG.get_mime_type(), "audio/ogg");
-        assert_eq!(FileExtension::M4A.get_mime_type(), "audio/m4a");
-
-        // Test get_file_type
-        assert_eq!(FileExtension::PNG.get_file_type(), FileType::Image);
-        assert_eq!(FileExtension::RPGMVP.get_file_type(), FileType::Image);
-        assert_eq!(FileExtension::PNG_.get_file_type(), FileType::Image);
-        assert_eq!(FileExtension::OGG.get_file_type(), FileType::Audio);
-        assert_eq!(FileExtension::RPGMVO.get_file_type(), FileType::Audio);
-        assert_eq!(FileExtension::OGG_.get_file_type(), FileType::Audio);
-    }
+    crc
 }

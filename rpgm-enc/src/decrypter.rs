@@ -2,24 +2,12 @@ use crate::types::*;
 
 #[derive(Default, serde::Deserialize, serde::Serialize, Clone)]
 pub struct Decrypter {
-    // Encryption Fields
     pub key: Option<Key>,
-
-    // Option Fields
     ignore_fake_header: bool,
-
-    // Fake-Header Info Fields
     header_len: Option<usize>,
     signature: Option<String>,
     version: Option<String>,
     remain: Option<String>,
-
-    // Header Lengths
-    png_header_len: Option<usize>,
-    ogg_header_len: Option<usize>,
-    m4a_header_len: Option<usize>,
-
-    // Cached fake header
     fake_header_cache: Vec<u8>,
 }
 
@@ -29,17 +17,6 @@ impl Decrypter {
     const DEFAULT_VERSION: &'static str = "000301";
     const DEFAULT_REMAIN: &'static str = "0000000000";
 
-    const PNG_HEADER_BYTES: &'static [u8] = &[
-        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
-    ];
-    const OGG_HEADER_BYTES: &'static [u8] = &[
-        0x4F, 0x67, 0x67, 0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    ];
-    const M4A_HEADER_BYTES: &'static [u8] = &[
-        0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x4D, 0x34, 0x41, 0x20, 0x00, 0x00, 0x00, 0x00,
-    ];
-
     pub fn new(key: Option<Key>) -> Self {
         let mut decrypter = Decrypter {
             key,
@@ -48,9 +25,6 @@ impl Decrypter {
             signature: None,
             version: None,
             remain: None,
-            png_header_len: None,
-            ogg_header_len: None,
-            m4a_header_len: None,
             fake_header_cache: Vec::new(),
         };
         decrypter.rebuild_fake_header();
@@ -80,23 +54,24 @@ impl Decrypter {
         &self.fake_header_cache
     }
 
-    pub fn from_file(file_contents: &[u8]) -> Option<Self> {
-        let key = Self::detect_key_from_file(file_contents);
-        key.map(|k| Self::new(Some(k)))
-    }
-
     pub fn verify_fake_header(&self, file_header: &[u8]) -> bool {
         let fake_header = self.build_fake_header();
         if file_header.len() < self.get_header_len() {
             return false;
         }
-
         file_header[..self.get_header_len()] == fake_header[..self.get_header_len()]
     }
 
-    pub fn decrypt(&self, data: &[u8]) -> Result<Vec<u8>> {
+    pub fn decrypt(&self, data: &[u8], file_type: FileExtension) -> Result<Vec<u8>> {
         if data.is_empty() {
             return Err(Error::EmptyFile);
+        }
+
+        if matches!(
+            file_type,
+            FileExtension::M4A | FileExtension::M4A_ | FileExtension::RPGMVM
+        ) {
+            return Ok(data.to_vec());
         }
 
         let header_len = self.get_header_len();
@@ -113,13 +88,20 @@ impl Decrypter {
 
         let mut content = data[header_len..].to_vec();
         self.xor_bytes(&mut content);
-
         Ok(content)
     }
 
-    pub fn encrypt(&self, data: &[u8]) -> Result<Vec<u8>> {
+    pub fn encrypt(&self, data: &[u8], file_type: FileExtension) -> Result<Vec<u8>> {
         if data.is_empty() {
             return Err(Error::EmptyFile);
+        }
+
+        // M4A does not get encrypted — just return the data
+        if matches!(
+            file_type,
+            FileExtension::M4A | FileExtension::M4A_ | FileExtension::RPGMVM
+        ) {
+            return Ok(data.to_vec());
         }
 
         let mut content = data.to_vec();
@@ -133,7 +115,6 @@ impl Decrypter {
         if !self.verify_fake_header(&result[0..self.get_header_len()]) {
             return Err(Error::InvalidHeader);
         }
-
         Ok(result)
     }
 
@@ -153,14 +134,14 @@ impl Decrypter {
 
         let has_correct_header = match file_type {
             FileExtension::OGG | FileExtension::RPGMVO | FileExtension::OGG_ if data.len() >= 4 => {
-                &data[0..4] == &[0x4F, 0x67, 0x67, 0x53]
-            } // "OggS"
+                &data[0..4] == b"OggS"
+            }
             FileExtension::PNG | FileExtension::RPGMVP | FileExtension::PNG_ if data.len() >= 8 => {
                 &data[0..8] == &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
-            } // PNG signature
+            }
             FileExtension::M4A | FileExtension::RPGMVM | FileExtension::M4A_ if data.len() >= 8 => {
                 &data[4..8] == b"ftyp"
-            } // M4A signature
+            }
             _ => false,
         };
 
@@ -168,103 +149,66 @@ impl Decrypter {
             return Ok(data.to_vec());
         }
 
-        let fake_header_len = self.get_header_len();
-        let (correct_header_len, header_bytes) = match file_type {
-            FileExtension::PNG | FileExtension::RPGMVP | FileExtension::PNG_ => (
-                self.png_header_len.unwrap_or(fake_header_len),
-                Self::PNG_HEADER_BYTES,
-            ),
-            FileExtension::OGG | FileExtension::RPGMVO | FileExtension::OGG_ => {
-                (self.ogg_header_len.unwrap_or(28), Self::OGG_HEADER_BYTES)
+        match file_type {
+            FileExtension::PNG | FileExtension::RPGMVP | FileExtension::PNG_ => {
+                let fake_header_len = self.get_header_len();
+                let header = &PNG_HEADER_BYTES[..fake_header_len.min(PNG_HEADER_BYTES.len())];
+
+                let has_fake_header = data.len() >= fake_header_len
+                    && self.verify_fake_header(&data[0..fake_header_len]);
+                let content = if has_fake_header {
+                    if data.len() < fake_header_len {
+                        return Err(Error::InvalidHeader);
+                    }
+                    &data[fake_header_len..]
+                } else {
+                    data
+                };
+
+                let mut result = Vec::with_capacity(content.len() + header.len());
+                result.extend_from_slice(header);
+                result.extend_from_slice(content);
+                Ok(result)
             }
-            FileExtension::M4A | FileExtension::RPGMVM | FileExtension::M4A_ => (
-                self.m4a_header_len.unwrap_or(fake_header_len),
-                Self::M4A_HEADER_BYTES,
-            ),
-        };
-
-        let len = correct_header_len.min(header_bytes.len());
-        let header = &header_bytes[..len];
-
-        let has_fake_header = if data.len() >= fake_header_len {
-            self.verify_fake_header(&data[0..fake_header_len])
-        } else {
-            false
-        };
-
-        let content = if has_fake_header {
-            if data.len() < fake_header_len {
-                return Err(Error::InvalidHeader);
-            }
-            &data[fake_header_len..]
-        } else {
-            data
-        };
-
-        let mut result = Vec::with_capacity(content.len() + correct_header_len);
-        result.extend_from_slice(header);
-        result.extend_from_slice(content);
-
-        Ok(result)
-    }
-
-    fn get_header_bytes(header_str: &str, header_len: usize) -> Vec<u8> {
-        let header_to_restore: Vec<&str> = header_str.split(' ').collect();
-        let len = header_len.min(header_to_restore.len());
-        let mut restored_header = vec![0u8; len];
-
-        for i in 0..len {
-            if let Ok(byte) = u8::from_str_radix(header_to_restore[i], 16) {
-                restored_header[i] = byte;
-            }
+            _ => Err(Error::InvalidHeader),
         }
-
-        restored_header
     }
 
     pub fn get_header_len(&self) -> usize {
         self.header_len.unwrap_or(Self::DEFAULT_HEADER_LEN)
     }
 
-    fn get_signature(&self) -> String {
-        self.signature
-            .clone()
-            .unwrap_or_else(|| Self::DEFAULT_SIGNATURE.to_string())
+    fn get_signature(&self) -> &str {
+        self.signature.as_deref().unwrap_or(Self::DEFAULT_SIGNATURE)
     }
 
-    fn get_version(&self) -> String {
-        self.version
-            .clone()
-            .unwrap_or_else(|| Self::DEFAULT_VERSION.to_string())
+    fn get_version(&self) -> &str {
+        self.version.as_deref().unwrap_or(Self::DEFAULT_VERSION)
     }
 
-    fn get_remain(&self) -> String {
-        self.remain
-            .clone()
-            .unwrap_or_else(|| Self::DEFAULT_REMAIN.to_string())
+    fn get_remain(&self) -> &str {
+        self.remain.as_deref().unwrap_or(Self::DEFAULT_REMAIN)
     }
 
-    pub fn detect_key_from_file(file_contents: &[u8]) -> Option<Key> {
-        let header_len = Self::new(None).get_header_len();
-        Self::detect_encryption_code(file_contents, header_len)
-    }
-
-    fn detect_encryption_code(data: &[u8], header_len: usize) -> Option<Key> {
-        if let Some(key) = Key::from_png_header(header_len, data) {
-            return Some(key);
-        }
-
-        if let Ok(text) = String::from_utf8(data.to_vec()) {
-            if let Some(key) = Key::from_json(&text) {
-                return Some(key);
+    pub fn detect_key(data: &[u8], file_type: FileExtension) -> Option<Key> {
+        match file_type {
+            FileExtension::PNG | FileExtension::RPGMVP | FileExtension::PNG_ => {
+                Key::from_png_header(Self::DEFAULT_HEADER_LEN, data)
             }
-
-            Key::from_rpg_core(&text)
-        } else {
-            None
+            FileExtension::OGG | FileExtension::RPGMVO | FileExtension::OGG_ => {
+                Key::from_ogg_header(Self::DEFAULT_HEADER_LEN, data)
+            }
+            _ => None,
         }
     }
 
+    pub fn set_header_params(&mut self, len: usize, sig: &str, ver: &str, rem: &str) {
+        self.header_len = Some(len);
+        self.signature = Some(sig.to_string());
+        self.version = Some(ver.to_string());
+        self.remain = Some(rem.to_string());
+        self.rebuild_fake_header();
+    }
 }
 
 #[cfg(test)]
@@ -284,10 +228,8 @@ mod tests {
         let key = Key::new("deadbeef").unwrap();
         let decrypter = Decrypter::new(Some(key));
         let test_data = b"Hello, World!";
-
-        let encrypted = decrypter.encrypt(test_data)?;
-        let decrypted = decrypter.decrypt(&encrypted)?;
-
+        let encrypted = decrypter.encrypt(test_data, FileExtension::PNG_)?;
+        let decrypted = decrypter.decrypt(&encrypted, FileExtension::PNG_)?;
         assert_eq!(&decrypted, test_data);
         Ok(())
     }

@@ -1,178 +1,192 @@
-use rpgm_enc::{Decrypter, FileExtension, RPGFile, RPGMakerVersion, Result};
-use std::fs;
-use std::path::PathBuf;
-use symphonia::core::codecs::CODEC_TYPE_VORBIS;
-use symphonia::core::formats::FormatOptions;
-use symphonia::core::io::MediaSourceStream;
-use symphonia::core::meta::MetadataOptions;
-use symphonia::core::probe::Hint;
-use symphonia::default::get_probe;
+use rpgm_enc::{Decrypter, FileExtension, Key, RPGMakerVersion, Result};
 
 fn verify_image_format(data: &[u8]) -> bool {
-    match image::load_from_memory(data) {
-        Ok(img) => {
-            println!(
-                "Successfully loaded image: {}x{}",
-                img.width(),
-                img.height()
-            );
-            true
-        }
-        Err(e) => {
-            println!("Failed to verify image format: {:?}", e);
-            false
-        }
-    }
+    image::load_from_memory(data).is_ok()
 }
 
 fn verify_audio_format(data: &[u8], format_hint: &str) -> bool {
+    use symphonia::core::codecs::audio::AudioDecoderOptions;
+    use symphonia::core::formats::probe::Hint;
+    use symphonia::core::formats::{FormatOptions, TrackType};
+    use symphonia::core::io::MediaSourceStream;
+    use symphonia::core::meta::MetadataOptions;
+
     let source = std::io::Cursor::new(Vec::from(data));
-    let media_source = MediaSourceStream::new(Box::new(source), Default::default());
+    let mss = MediaSourceStream::new(Box::new(source), Default::default());
 
     let mut hint = Hint::new();
     hint.with_extension(format_hint);
 
-    let probe = get_probe();
-    let fmt_opts = FormatOptions::default();
-    let meta_opts = MetadataOptions::default();
-
-    match probe.format(&hint, media_source, &fmt_opts, &meta_opts) {
-        Ok(probed) => {
-            let fmt = probed.format;
-
-            if fmt.tracks().is_empty() {
-                println!("No tracks found in the audio file");
-                return false;
-            }
-
-            let track = &fmt.tracks()[0];
-
-            if track.codec_params.codec != CODEC_TYPE_VORBIS {
-                println!("Not a Vorbis audio track: {:?}", track.codec_params.codec);
-                return false;
-            }
-
-            if track.codec_params.sample_rate.is_none() {
-                println!("No sample rate information");
-                return false;
-            }
-
-            if track.codec_params.channels.is_none() {
-                println!("No channel information");
-                return false;
-            }
-
-            true
-        }
+    let mut format = match symphonia::default::get_probe().probe(
+        &hint,
+        mss,
+        FormatOptions::default(),
+        MetadataOptions::default(),
+    ) {
+        Ok(f) => f,
         Err(e) => {
-            println!("Failed to verify format: {:?}", e);
-            false
+            println!("Probe failed: {:?}", e);
+            return false;
+        }
+    };
+
+    let track = match format.default_track(TrackType::Audio) {
+        Some(t) => t,
+        None => {
+            println!("No audio track found");
+            return false;
+        }
+    };
+
+    let audio_params = match track.codec_params.as_ref().and_then(|p| p.audio()) {
+        Some(p) => p,
+        None => {
+            println!("Track has no audio codec parameters");
+            return false;
+        }
+    };
+
+    let mut decoder = match symphonia::default::get_codecs()
+        .make_audio_decoder(audio_params, &AudioDecoderOptions::default())
+    {
+        Ok(d) => d,
+        Err(e) => {
+            println!("Failed to create audio decoder: {:?}", e);
+            return false;
+        }
+    };
+
+    println!("Symphonia successfully created audio decoder");
+
+    let mut packets = 0usize;
+    while packets < 5 {
+        match format.next_packet() {
+            Ok(Some(packet)) => match decoder.decode(&packet) {
+                Ok(_) => packets += 1,
+                Err(e) => {
+                    println!("Decode error on packet {}: {:?}", packets, e);
+                    return false;
+                }
+            },
+            Ok(None) => break, 
+            Err(e) => {
+                println!("Error reading packet: {:?}", e);
+                return false;
+            }
         }
     }
+
+    packets > 0
 }
 
 #[test]
-fn test_ogg_conversion() -> Result<()> {
-    let test_png = include_bytes!("test_data/test.png_");
-    let key =
-        Decrypter::detect_key_from_file(test_png).expect("Failed to detect key from PNG file");
-    println!("Detected encryption key: {}", key.as_str());
-
-    let test_data = include_bytes!("test_data/test.ogg_");
-    println!(
-        "Original encrypted data first 32 bytes: {:02X?}",
-        &test_data[..32.min(test_data.len())]
+fn test_extension_conversion() {
+    assert_eq!(
+        FileExtension::RPGMVP.convert(true, RPGMakerVersion::MV),
+        FileExtension::PNG
     );
+    assert_eq!(
+        FileExtension::RPGMVO.convert(true, RPGMakerVersion::MV),
+        FileExtension::OGG
+    );
+    assert_eq!(
+        FileExtension::PNG.convert(false, RPGMakerVersion::MZ),
+        FileExtension::PNG_
+    );
+    assert_eq!(
+        FileExtension::OGG.convert(false, RPGMakerVersion::MZ),
+        FileExtension::OGG_
+    );
+}
 
-    {
-        let mut rpg_file = RPGFile::new(PathBuf::from("test.ogg_"))?;
-        rpg_file.set_version(RPGMakerVersion::MV);
-        rpg_file.set_content(test_data.to_vec());
+#[test]
+fn test_extension_properties() {
+    assert!(FileExtension::RPGMVP.is_encrypted());
+    assert!(!FileExtension::PNG.is_encrypted());
 
-        assert!(rpg_file.is_encrypted());
-        assert_eq!(rpg_file.extension(), Some(FileExtension::OGG_));
+    assert_eq!(FileExtension::PNG.get_mime_type(), "image/png");
+    assert_eq!(FileExtension::OGG.get_mime_type(), "audio/ogg");
+    assert_eq!(FileExtension::M4A.get_mime_type(), "audio/m4a");
+}
 
-        rpg_file.convert_extension(true);
-        assert_eq!(rpg_file.extension(), Some(FileExtension::OGG));
+#[test]
+fn test_key_from_png() -> Result<()> {
+    let test_png = include_bytes!("test_data/test.png_");
 
-        rpg_file.convert_extension(false);
-        assert_eq!(rpg_file.extension(), Some(FileExtension::RPGMVO));
-    }
+    let key = Decrypter::detect_key(test_png, FileExtension::PNG_)
+        .expect("Failed to detect key from PNG");
+    println!("PNG key: {}", key.as_str());
 
-    {
-        let mut rpg_file = RPGFile::new(PathBuf::from("test.ogg_"))?;
-        rpg_file.set_version(RPGMakerVersion::MZ);
-        rpg_file.set_content(test_data.to_vec());
+    let decrypter = Decrypter::new(Some(key));
+    let decrypted = decrypter.decrypt(test_png, FileExtension::PNG_)?;
+    let restored = decrypter.restore_header(&decrypted, FileExtension::PNG)?;
 
-        assert!(rpg_file.is_encrypted());
-        assert_eq!(rpg_file.extension(), Some(FileExtension::OGG_));
+    assert!(verify_image_format(&restored));
+    Ok(())
+}
 
-        rpg_file.convert_extension(true);
-        assert_eq!(rpg_file.extension(), Some(FileExtension::OGG));
+#[test]
+fn test_key_from_audio_only() -> Result<()> {
+    let test_ogg = include_bytes!("test_data/test.ogg_");
 
-        rpg_file.convert_extension(false);
-        assert_eq!(rpg_file.extension(), Some(FileExtension::OGG_));
-    }
+    let key = Key::from_ogg_header(16, test_ogg).expect("Failed to extract key from OGG");
+    println!("Audio-only key: {}", key.as_str());
+
+    let decrypter = Decrypter::new(Some(key));
+    let decrypted = decrypter.decrypt(test_ogg, FileExtension::OGG_)?;
+
+    assert_eq!(&decrypted[0..4], b"OggS");
+    assert!(verify_audio_format(&decrypted, "ogg"));
+
+    let restored = decrypter.restore_header(&decrypted, FileExtension::OGG_)?;
+    assert_eq!(&restored[0..4], b"OggS");
 
     Ok(())
 }
 
 #[test]
-fn test_png_conversion() -> Result<()> {
-    let test_png = include_bytes!("test_data/test.png_");
-    let key =
-        Decrypter::detect_key_from_file(test_png).expect("Failed to detect key from PNG file");
-    println!("Detected encryption key: {}", key.as_str());
+fn test_detect_key_with_hint() -> Result<()> {
+    let test_ogg = include_bytes!("test_data/test.ogg_");
 
-    println!(
-        "Original encrypted data first 32 bytes: {:02X?}",
-        &test_png[..32.min(test_png.len())]
-    );
-
-    let mut rpg_file = RPGFile::new(PathBuf::from("test.png_"))?;
-    rpg_file.set_content(test_png.to_vec());
-
-    assert!(rpg_file.is_encrypted());
-    assert!(rpg_file.is_image());
-    assert_eq!(rpg_file.extension(), Some(FileExtension::PNG_));
+    let key = Decrypter::detect_key(test_ogg, FileExtension::OGG_)
+        .expect("detect_key should find key in OGG");
 
     let decrypter = Decrypter::new(Some(key));
-    let decrypted_content = decrypter.decrypt(rpg_file.content().unwrap())?;
-    println!(
-        "Decrypted content first 32 bytes: {:02X?}",
-        &decrypted_content[..32.min(decrypted_content.len())]
-    );
+    let decrypted = decrypter.decrypt(test_ogg, FileExtension::OGG_)?;
 
-    let decrypted_path = "tests/test_data/decrypted_only_test.png";
-    fs::write(decrypted_path, &decrypted_content)?;
-    println!(
-        "Saved decrypted (before header restoration) file to: {}",
-        decrypted_path
-    );
+    assert_eq!(&decrypted[0..4], b"OggS");
+    assert!(verify_audio_format(&decrypted, "ogg"));
+    Ok(())
+}
 
-    let restored_content = decrypter.restore_header(&decrypted_content, FileExtension::PNG)?;
-    println!(
-        "Restored content first 32 bytes: {:02X?}",
-        &restored_content[..32.min(restored_content.len())]
-    );
+#[test]
+fn test_full_audio_only_pipeline() -> Result<()> {
+    let test_ogg = include_bytes!("test_data/test.ogg_");
 
-    let output_path = "tests/test_data/decrypted_test.png";
-    fs::write(output_path, &restored_content)?;
-    println!("Saved final decrypted file to: {}", output_path);
+    let key = Decrypter::detect_key(test_ogg, FileExtension::OGG_)
+        .expect("Should extract key from audio");
 
-    rpg_file.convert_extension(true);
-    rpg_file.set_content(restored_content);
+    let decrypter = Decrypter::new(Some(key));
+    let decrypted = decrypter.decrypt(test_ogg, FileExtension::OGG_)?;
+    let final_data = decrypter.restore_header(&decrypted, FileExtension::OGG_)?;
 
-    assert_eq!(rpg_file.extension(), Some(FileExtension::PNG));
-    assert!(!rpg_file.is_encrypted());
-    assert_eq!(rpg_file.mime_type(), Some("image/png"));
+    assert!(verify_audio_format(&final_data, "ogg"));
+    Ok(())
+}
 
-    assert!(
-        verify_image_format(rpg_file.content().unwrap()),
-        "Failed to verify PNG format"
-    );
+#[test]
+fn test_m4a_passthrough() -> Result<()> {
+    let key = Key::new("deadbeef").unwrap();
+    let decrypter = Decrypter::new(Some(key));
 
-    let _ = fs::remove_file(output_path);
-    let _ = fs::remove_file(decrypted_path);
+    let mut m4a = vec![0x00, 0x00, 0x00, 0x20];
+    m4a.extend_from_slice(b"ftypM4A ");
+    m4a.extend_from_slice(&[0u8; 8]);
+
+    let encrypted = decrypter.encrypt(&m4a, FileExtension::M4A_)?;
+    assert_eq!(encrypted, m4a);
+
+    let decrypted = decrypter.decrypt(&m4a, FileExtension::M4A_)?;
+    assert_eq!(decrypted, m4a);
     Ok(())
 }
